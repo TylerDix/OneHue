@@ -1,5 +1,5 @@
 //
-//  One_HueApp.swift
+//  ContentView.swift
 //  One Hue
 //
 //  Created by Tyler on 3/4/26.
@@ -7,11 +7,18 @@
 
 import SwiftUI
 
-@main
-struct One_HueApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
+struct ContentView: View {
+    var body: some View {
+        VStack {
+            Image(systemName: "globe")
+                .imageScale(.large)
+                .foregroundStyle(.tint)
+            Text("Hello, world!")
         }
+        .padding()
     }
+}
+
+#Preview {
+    ContentView()
 }
