@@ -1,8 +1,11 @@
-//
-//  FillAnimation.swift
-//  One Hue
-//
-//  Created by Tyler on 3/4/26.
-//
+import SwiftUI
 
-import Foundation
+struct FillPulse: Equatable {
+    let regionID: Int
+    let trigger: UUID
+}
+
+enum FillAnimation {
+    static let duration: Double = 0.20
+    static let bloomScale: CGFloat = 1.035
+}

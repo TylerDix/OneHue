@@ -1,8 +1,8 @@
-//
-//  Region.swift
-//  One Hue
-//
-//  Created by Tyler on 3/4/26.
-//
+import SwiftUI
 
-import Foundation
+struct Region: Identifiable {
+    let id: Int
+    let number: Int
+    let colorIndex: Int
+    let path: Path
+}
