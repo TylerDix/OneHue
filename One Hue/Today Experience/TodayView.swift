@@ -2,14 +2,13 @@ import SwiftUI
 
 struct TodayView: View {
     @StateObject private var store = DailyArtworkStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showSettings = false
     @State private var showCompletion = false
     @State private var wrongColorToast = false
 
-    // Separate opacity controls for the completion sequence:
-    // - Chrome (header, palette) fades to 0
-    // - Canvas dims but stays visible as backdrop
+    // Completion sequence controls
     @State private var chromeOpacity: CGFloat = 1.0
     @State private var canvasOpacity: CGFloat = 1.0
 
@@ -24,7 +23,6 @@ struct TodayView: View {
                 }
                 .padding(.horizontal, 18)
                 .opacity(canvasOpacity)
-                // Disable interaction once complete
                 .allowsHitTesting(!store.isComplete)
 
                 PaletteView(
@@ -61,7 +59,7 @@ struct TodayView: View {
                     .frame(maxHeight: .infinity, alignment: .top)
             }
 
-            // Completion — floats over the dimmed artwork
+            // Completion overlay — floats over dimmed artwork
             if showCompletion {
                 CompletionOverlayView(
                     message: store.artwork.completionMessage,
@@ -70,8 +68,31 @@ struct TodayView: View {
                 .transition(.opacity)
             }
         }
+        // Midnight handoff: fade the entire view during transition
+        .opacity(handoffOpacity)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                store.onForeground()
+            }
+        }
+        .onChange(of: store.handoffPhase) { _, phase in
+            if phase == .fadingIn {
+                // New day loaded — reset completion state for fresh canvas
+                resetCompletionSequence()
+            }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
+        }
+    }
+
+    // MARK: - Handoff Opacity
+
+    private var handoffOpacity: CGFloat {
+        switch store.handoffPhase {
+        case .idle:      return 1.0
+        case .fadingOut: return 0.0
+        case .fadingIn:  return 1.0
         }
     }
 
@@ -108,19 +129,19 @@ struct TodayView: View {
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
 
-        // Step 1: Fade out chrome (header, palette) — 400ms
+        // Chrome fades out
         withAnimation(.easeOut(duration: 0.4)) {
             chromeOpacity = 0.0
         }
 
-        // Step 2: Dim the artwork to a quiet backdrop — starts slightly after, 600ms
+        // Artwork dims to backdrop
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeOut(duration: 0.6)) {
                 canvasOpacity = 0.35
             }
         }
 
-        // Step 3: Bring in the completion overlay — after artwork has dimmed
+        // Message floats in
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             withAnimation(.easeIn(duration: 0.5)) {
                 showCompletion = true

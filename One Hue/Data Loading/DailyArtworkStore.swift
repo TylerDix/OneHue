@@ -19,14 +19,38 @@ final class DailyArtworkStore: ObservableObject {
         didSet { reloadForCurrentDay() }
     }
 
+    /// Drives the crossfade transition in TodayView during midnight handoff
+    @Published var handoffPhase: HandoffPhase = .idle
+
+    enum HandoffPhase: Equatable {
+        case idle
+        case fadingOut
+        case fadingIn
+    }
+
+    // MARK: - Private
+
+    /// The day string we currently display — used to detect date changes
+    private var currentDayID: String
+
+    /// Timer that checks for midnight crossing
+    private var midnightTimer: AnyCancellable?
+
+    /// Pre-cached artwork for tomorrow (loaded in background)
+    private var tomorrowArtwork: DailyArtwork?
+
     // MARK: - Init
 
     init() {
         let dayID = Self.dayString(offsetDays: 0)
         let a = Self.loadArtwork(dayID: dayID)
         self.artwork = a
+        self.currentDayID = dayID
         self.filledRegionIDs = Self.loadProgress(for: a.id)
         self.selectedColorIndex = 0
+
+        startMidnightTimer()
+        preCacheTomorrow()
     }
 
     // MARK: - Derived
@@ -56,21 +80,104 @@ final class DailyArtworkStore: ObservableObject {
         filledRegionIDs = []
     }
 
+    // MARK: - Scene Phase
+
+    /// Call this from the view layer when the app returns to foreground.
+    /// Catches cases where the user left the app before midnight and returns after.
+    func onForeground() {
+        checkForNewDay()
+    }
+
     // MARK: - Debug Controls
 
     func debugPrevDay()     { debugDayOffset -= 1 }
     func debugNextDay()     { debugDayOffset += 1 }
     func debugBackToToday() { debugDayOffset = 0 }
 
-    // MARK: - Reload
+    // MARK: - Midnight Handoff
+
+    private func startMidnightTimer() {
+        // Check every 30 seconds. Light — no work unless the date actually changed.
+        midnightTimer = Timer.publish(every: 30, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.checkForNewDay()
+            }
+    }
+
+    private func checkForNewDay() {
+        let todayID = Self.dayString(offsetDays: debugDayOffset)
+        guard todayID != currentDayID else { return }
+
+        // Date has changed — begin handoff
+        performHandoff(to: todayID)
+    }
+
+    private func performHandoff(to newDayID: String) {
+        guard handoffPhase == .idle else { return }
+
+        // Step 1: Fade out
+        withAnimation(.easeOut(duration: 0.6)) {
+            handoffPhase = .fadingOut
+        }
+
+        // Step 2: After fade out, swap the artwork
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) { [weak self] in
+            guard let self else { return }
+
+            // Use pre-cached artwork if it matches, otherwise load fresh
+            let newArtwork: DailyArtwork
+            if let cached = self.tomorrowArtwork, cached.id == newDayID {
+                newArtwork = cached
+                self.tomorrowArtwork = nil
+            } else {
+                newArtwork = Self.loadArtwork(dayID: newDayID)
+            }
+
+            self.artwork = newArtwork
+            self.currentDayID = newDayID
+            self.selectedColorIndex = 0
+            self.filledRegionIDs = Self.loadProgress(for: newArtwork.id)
+
+            // Step 3: Fade in the new day
+            withAnimation(.easeIn(duration: 0.6)) {
+                self.handoffPhase = .fadingIn
+            }
+
+            // Step 4: Return to idle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+                self.handoffPhase = .idle
+                self.preCacheTomorrow()
+            }
+        }
+    }
+
+    // MARK: - Pre-caching
+
+    /// Load tomorrow's artwork into memory so the midnight transition is instant.
+    private func preCacheTomorrow() {
+        let tomorrowID = Self.dayString(offsetDays: debugDayOffset + 1)
+        // Load on a background-friendly path (the load itself is synchronous bundle access,
+        // but we keep it off the hot path)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.tomorrowArtwork = Self.loadArtwork(dayID: tomorrowID)
+        }
+    }
+
+    // MARK: - Reload (debug)
 
     private func reloadForCurrentDay() {
         let dayID = Self.dayString(offsetDays: debugDayOffset)
         let newArtwork = Self.loadArtwork(dayID: dayID)
         artwork = newArtwork
+        currentDayID = dayID
         selectedColorIndex = 0
         filledRegionIDs = Self.loadProgress(for: newArtwork.id)
+        tomorrowArtwork = nil
+        preCacheTomorrow()
     }
+
+    // MARK: - Loading
 
     private static func loadArtwork(dayID: String) -> DailyArtwork {
         let filename = "daily_\(dayID)"
@@ -128,8 +235,6 @@ final class DailyArtworkStore: ObservableObject {
 
     // MARK: - Mock Fallback
 
-    /// Generates a simple test artwork when no JSON or SVG is available.
-    /// This is a peace symbol made of basic shapes — placeholder until real assets exist.
     private static func makeMockArtwork(dayID: String) -> DailyArtwork {
         let palette: [Color] = [
             Color(hex: "#FF6B9D"),  // 0: Rose Pink
@@ -194,17 +299,16 @@ final class DailyArtworkStore: ObservableObject {
             p.closeSubpath()
         })
 
-        // Inner peace lines (vertical bar + two diagonal arms)
-        add(7, 6, Path(CGRect(x: 0.485, y: 0.1, width: 0.03, height: 0.4)))    // vertical bar
-        add(7, 6, Path(CGRect(x: 0.485, y: 0.5, width: 0.03, height: 0.4)))     // vertical bar lower
-        add(8, 7, Path { p in  // left arm
+        add(7, 6, Path(CGRect(x: 0.485, y: 0.1, width: 0.03, height: 0.4)))
+        add(7, 6, Path(CGRect(x: 0.485, y: 0.5, width: 0.03, height: 0.4)))
+        add(8, 7, Path { p in
             p.move(to: CGPoint(x: 0.5, y: 0.5))
             p.addLine(to: CGPoint(x: 0.28, y: 0.72))
             p.addLine(to: CGPoint(x: 0.30, y: 0.74))
             p.addLine(to: CGPoint(x: 0.52, y: 0.52))
             p.closeSubpath()
         })
-        add(8, 7, Path { p in  // right arm
+        add(8, 7, Path { p in
             p.move(to: CGPoint(x: 0.5, y: 0.5))
             p.addLine(to: CGPoint(x: 0.72, y: 0.72))
             p.addLine(to: CGPoint(x: 0.70, y: 0.74))
