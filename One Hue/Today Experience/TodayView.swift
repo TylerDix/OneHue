@@ -63,7 +63,7 @@ struct TodayView: View {
             if showCompletion {
                 CompletionOverlayView(
                     message: store.artwork.completionMessage,
-                    count: 12_847  // TODO: Replace with live Supabase counter
+                    count: store.globalCount
                 )
                 .transition(.opacity)
             }

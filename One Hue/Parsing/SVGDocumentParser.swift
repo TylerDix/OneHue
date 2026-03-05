@@ -3,14 +3,20 @@ import SwiftUI
 
 /// Parses SVG files exported from Adobe Illustrator into `DailyArtwork` models.
 ///
-/// Each named SVG element (`<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`)
-/// with a fill color becomes a colorable `Region`. The parser automatically builds
-/// a color palette from the fill colors found in the SVG.
+/// Each SVG element (`<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`)
+/// with a fill color becomes a colorable `Region`. The parser builds a color palette
+/// from the fill colors found in the SVG.
+///
+/// Supports fills defined via:
+/// - Inline `fill` attribute
+/// - Inline `style` attribute
+/// - CSS `<style>` block with class selectors (Illustrator default)
+/// - Inherited fill from parent `<g>` elements
 ///
 /// Usage:
 /// ```swift
 /// let artwork = try SVGDocumentParser.parse(
-///     svgNamed: "day_001",
+///     svgNamed: "day_001_peace",
 ///     title: "Peace",
 ///     subject: "peace symbol",
 ///     completionMessage: "Today, [count] people traced the oldest wish..."
@@ -51,15 +57,18 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         guard xmlParser.parse() else {
             throw parser.error ?? OneHueError.parseFailed("Unknown XML error")
         }
+
+        // Parse the CSS <style> block if present
+        parser.parseCSSStyles()
+
         guard !parser.rawRegions.isEmpty else {
             throw OneHueError.noRegions
         }
 
         // Build palette from discovered fill colors
-        let sortedColors = parser.colorOrder  // preserves discovery order
+        let sortedColors = parser.colorOrder
         let palette: [Color] = sortedColors.map { Color(hex: $0) }
 
-        // Build a map: hex → palette index
         var hexToIndex: [String: Int] = [:]
         for (i, hex) in sortedColors.enumerated() {
             hexToIndex[hex] = i
@@ -73,19 +82,28 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         }
 
         let regions: [Region] = parser.rawRegions.enumerated().map { idx, raw in
-            // Parse the SVG path data into a SwiftUI Path
             let originalPath = SVGPathParser.path(from: raw.pathData)
 
             // Normalize to 0...1
-            let normalized = originalPath.applying(
+            var normalized = originalPath.applying(
                 CGAffineTransform(scaleX: 1.0 / vw, y: 1.0 / vh)
             )
+
+            // Apply transform if present (e.g. rotated rects from Illustrator)
+            if let t = raw.transform {
+                // The transform is in original coordinates, so we need to apply it
+                // before normalization. Re-do: apply transform to original, then normalize.
+                let transformed = originalPath.applying(t)
+                normalized = transformed.applying(
+                    CGAffineTransform(scaleX: 1.0 / vw, y: 1.0 / vh)
+                )
+            }
 
             let colorIdx = hexToIndex[raw.fillHex] ?? 0
 
             return Region(
                 id: idx,
-                number: colorIdx + 1,  // 1-indexed display number
+                number: colorIdx + 1,
                 colorIndex: colorIdx,
                 path: normalized
             )
@@ -108,16 +126,22 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
     private struct RawRegion {
         let pathData: String
         let fillHex: String
+        let transform: CGAffineTransform?
     }
 
     private var rawRegions: [RawRegion] = []
-    private var colorOrder: [String] = []          // unique hex values in discovery order
+    private var colorOrder: [String] = []
     private var colorSet: Set<String> = []
     private var viewBoxW: CGFloat = 0
     private var viewBoxH: CGFloat = 0
     private var svgWidth: CGFloat = 0
     private var svgHeight: CGFloat = 0
     private var error: Error?
+
+    // CSS class → fill color map (parsed from <style> block)
+    private var classToFill: [String: String] = [:]
+    private var styleContent = ""
+    private var insideStyle = false
 
     // Track nested <g> transforms and styles
     private var groupFillStack: [String?] = []
@@ -132,6 +156,10 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         case "svg":
             parseSVGElement(attrs)
 
+        case "style":
+            insideStyle = true
+            styleContent = ""
+
         case "g":
             let fill = extractFill(from: attrs)
             groupFillStack.append(fill)
@@ -139,17 +167,20 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         case "path":
             guard let d = attrs["d"], !d.isEmpty else { return }
             if let fill = resolveFill(attrs), fill != "none" {
-                addRegion(pathData: d, fillHex: normalizeHex(fill))
+                let t = parseTransform(attrs["transform"])
+                addRegion(pathData: d, fillHex: normalizeHex(fill), transform: t)
             }
 
         case "rect":
-            if let fill = resolveFill(attrs), fill != "none",
-               let x = cgFloat(attrs["x"]), let y = cgFloat(attrs["y"]),
-               let w = cgFloat(attrs["width"]), let h = cgFloat(attrs["height"]) {
+            if let fill = resolveFill(attrs), fill != "none" {
+                let x = cgFloat(attrs["x"]) ?? 0
+                let y = cgFloat(attrs["y"]) ?? 0
+                guard let w = cgFloat(attrs["width"]), let h = cgFloat(attrs["height"]) else { return }
                 let rx = cgFloat(attrs["rx"]) ?? 0
                 let ry = cgFloat(attrs["ry"]) ?? 0
                 let d = SVGPathParser.rectToPathData(x: x, y: y, w: w, h: h, rx: rx, ry: ry)
-                addRegion(pathData: d, fillHex: normalizeHex(fill))
+                let t = parseTransform(attrs["transform"])
+                addRegion(pathData: d, fillHex: normalizeHex(fill), transform: t)
             }
 
         case "circle":
@@ -157,7 +188,8 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
                let cx = cgFloat(attrs["cx"]), let cy = cgFloat(attrs["cy"]),
                let r = cgFloat(attrs["r"]) {
                 let d = SVGPathParser.circleToPathData(cx: cx, cy: cy, r: r)
-                addRegion(pathData: d, fillHex: normalizeHex(fill))
+                let t = parseTransform(attrs["transform"])
+                addRegion(pathData: d, fillHex: normalizeHex(fill), transform: t)
             }
 
         case "ellipse":
@@ -165,14 +197,18 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
                let cx = cgFloat(attrs["cx"]), let cy = cgFloat(attrs["cy"]),
                let rx = cgFloat(attrs["rx"]), let ry = cgFloat(attrs["ry"]) {
                 let d = SVGPathParser.ellipseToPathData(cx: cx, cy: cy, rx: rx, ry: ry)
-                addRegion(pathData: d, fillHex: normalizeHex(fill))
+                let t = parseTransform(attrs["transform"])
+                addRegion(pathData: d, fillHex: normalizeHex(fill), transform: t)
             }
 
         case "polygon":
             if let fill = resolveFill(attrs), fill != "none",
                let points = attrs["points"] {
                 let d = SVGPathParser.polygonToPathData(points: points)
-                if !d.isEmpty { addRegion(pathData: d, fillHex: normalizeHex(fill)) }
+                if !d.isEmpty {
+                    let t = parseTransform(attrs["transform"])
+                    addRegion(pathData: d, fillHex: normalizeHex(fill), transform: t)
+                }
             }
 
         default:
@@ -185,13 +221,55 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         if el.lowercased() == "g" {
             _ = groupFillStack.popLast()
         }
+        if el.lowercased() == "style" {
+            insideStyle = false
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if insideStyle {
+            styleContent += string
+        }
     }
 
     func parser(_ parser: XMLParser, parseErrorOccurred err: Error) {
         error = OneHueError.parseFailed(err.localizedDescription)
     }
 
-    // MARK: - Helpers
+    // MARK: - CSS Style Parsing
+
+    /// Parse the accumulated CSS from the <style> block.
+    /// Extracts `.className { fill: #hex; }` patterns.
+    private func parseCSSStyles() {
+        guard !styleContent.isEmpty else { return }
+
+        // Match patterns like: .st0 { fill: #f8f8ee; }
+        // Also handles multiline and extra whitespace
+        let stripped = styleContent
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+
+        // Split on "}" to get each rule block
+        let blocks = stripped.components(separatedBy: "}")
+        for block in blocks {
+            let parts = block.components(separatedBy: "{")
+            guard parts.count == 2 else { continue }
+
+            let selector = parts[0].trimmingCharacters(in: .whitespaces)
+            let body = parts[1]
+
+            // Extract class name (e.g. ".st0" → "st0")
+            guard selector.hasPrefix(".") else { continue }
+            let className = String(selector.dropFirst())
+
+            // Extract fill from the body
+            if let fill = extractFillFromStyle(body) {
+                classToFill[className] = fill
+            }
+        }
+    }
+
+    // MARK: - Fill Resolution
 
     private func parseSVGElement(_ attrs: [String: String]) {
         if let vb = attrs["viewBox"] ?? attrs["viewbox"] {
@@ -205,7 +283,7 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         if let h = cgFloat(attrs["height"]) { svgHeight = h }
     }
 
-    /// Resolve fill color: element attribute > inline style > parent group > default black
+    /// Resolve fill color: explicit fill > inline style > CSS class > parent group > default black
     private func resolveFill(_ attrs: [String: String]) -> String? {
         // 1. Explicit fill attribute
         if let fill = attrs["fill"] { return fill }
@@ -215,18 +293,35 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
             return fill
         }
 
-        // 3. Inherited from parent <g>
+        // 3. CSS class
+        if let cls = attrs["class"] {
+            // Handle multiple classes (e.g. "st0 st1") — use first match
+            for className in cls.split(separator: " ") {
+                if let fill = classToFill[String(className)] {
+                    return fill
+                }
+            }
+        }
+
+        // 4. Inherited from parent <g>
         for fill in groupFillStack.reversed() {
             if let f = fill { return f }
         }
 
-        // 4. SVG default is black
+        // 5. SVG default is black
         return "#000000"
     }
 
     private func extractFill(from attrs: [String: String]) -> String? {
         if let fill = attrs["fill"] { return fill }
         if let style = attrs["style"] { return extractFillFromStyle(style) }
+        if let cls = attrs["class"] {
+            for className in cls.split(separator: " ") {
+                if let fill = classToFill[String(className)] {
+                    return fill
+                }
+            }
+        }
         return nil
     }
 
@@ -240,20 +335,101 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         return nil
     }
 
-    private func addRegion(pathData: String, fillHex: String) {
-        rawRegions.append(RawRegion(pathData: pathData, fillHex: fillHex))
+    private func addRegion(pathData: String, fillHex: String, transform: CGAffineTransform? = nil) {
+        rawRegions.append(RawRegion(pathData: pathData, fillHex: fillHex, transform: transform))
         if !colorSet.contains(fillHex) {
             colorSet.insert(fillHex)
             colorOrder.append(fillHex)
         }
     }
 
+    // MARK: - Transform Parsing
+
+    /// Parse SVG `transform` attribute. Supports translate, rotate, scale, matrix.
+    private func parseTransform(_ str: String?) -> CGAffineTransform? {
+        guard let str = str, !str.isEmpty else { return nil }
+
+        var result = CGAffineTransform.identity
+        var s = str
+
+        while !s.isEmpty {
+            s = s.trimmingCharacters(in: .whitespaces)
+
+            if s.hasPrefix("translate(") {
+                let (vals, rest) = extractArgs(from: s, prefix: "translate(")
+                if vals.count >= 2 {
+                    result = result.translatedBy(x: vals[0], y: vals[1])
+                } else if vals.count == 1 {
+                    result = result.translatedBy(x: vals[0], y: 0)
+                }
+                s = rest
+
+            } else if s.hasPrefix("rotate(") {
+                let (vals, rest) = extractArgs(from: s, prefix: "rotate(")
+                if vals.count == 3 {
+                    // rotate(angle, cx, cy)
+                    let angle = vals[0] * .pi / 180
+                    result = result.translatedBy(x: vals[1], y: vals[2])
+                    result = result.rotated(by: angle)
+                    result = result.translatedBy(x: -vals[1], y: -vals[2])
+                } else if vals.count >= 1 {
+                    result = result.rotated(by: vals[0] * .pi / 180)
+                }
+                s = rest
+
+            } else if s.hasPrefix("scale(") {
+                let (vals, rest) = extractArgs(from: s, prefix: "scale(")
+                if vals.count >= 2 {
+                    result = result.scaledBy(x: vals[0], y: vals[1])
+                } else if vals.count == 1 {
+                    result = result.scaledBy(x: vals[0], y: vals[0])
+                }
+                s = rest
+
+            } else if s.hasPrefix("matrix(") {
+                let (vals, rest) = extractArgs(from: s, prefix: "matrix(")
+                if vals.count == 6 {
+                    let m = CGAffineTransform(a: vals[0], b: vals[1], c: vals[2],
+                                              d: vals[3], tx: vals[4], ty: vals[5])
+                    result = result.concatenating(m)
+                }
+                s = rest
+
+            } else {
+                // Skip unknown content
+                break
+            }
+        }
+
+        return result == .identity ? nil : result
+    }
+
+    /// Extract numeric arguments from a transform function like "translate(10, 20) ..."
+    /// Returns the values and the remaining string after the closing ")".
+    private func extractArgs(from str: String, prefix: String) -> ([CGFloat], String) {
+        guard str.hasPrefix(prefix) else { return ([], str) }
+        let after = String(str.dropFirst(prefix.count))
+        guard let closeIdx = after.firstIndex(of: ")") else { return ([], str) }
+
+        let inner = String(after[after.startIndex..<closeIdx])
+        let rest = String(after[after.index(after: closeIdx)...])
+
+        let vals = inner
+            .replacingOccurrences(of: ",", with: " ")
+            .split(separator: " ")
+            .compactMap { Double($0) }
+            .map { CGFloat($0) }
+
+        return (vals, rest)
+    }
+
+    // MARK: - Helpers
+
     private func normalizeHex(_ fill: String) -> String {
         let trimmed = fill.trimmingCharacters(in: .whitespaces)
 
         if trimmed.hasPrefix("#") {
             let hex = trimmed.uppercased()
-            // Expand shorthand #RGB → #RRGGBB
             if hex.count == 4 {
                 let chars = Array(hex.dropFirst())
                 return "#\(chars[0])\(chars[0])\(chars[1])\(chars[1])\(chars[2])\(chars[2])"
@@ -271,7 +447,6 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
             }
         }
 
-        // Named colors
         let named: [String: String] = [
             "black": "#000000", "white": "#FFFFFF", "red": "#FF0000",
             "green": "#008000", "blue": "#0000FF", "yellow": "#FFFF00",

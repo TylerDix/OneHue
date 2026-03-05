@@ -11,7 +11,10 @@ final class DailyArtworkStore: ObservableObject {
 
     /// IDs of regions the user has filled
     @Published var filledRegionIDs: Set<Int> = [] {
-        didSet { persistProgress() }
+        didSet {
+            persistProgress()
+            checkCompletion()
+        }
     }
 
     /// Debug day offset (0 = today)
@@ -22,6 +25,9 @@ final class DailyArtworkStore: ObservableObject {
     /// Drives the crossfade transition in TodayView during midnight handoff
     @Published var handoffPhase: HandoffPhase = .idle
 
+    /// Live global completion count from Supabase
+    @Published var globalCount: Int = 0
+
     enum HandoffPhase: Equatable {
         case idle
         case fadingOut
@@ -30,14 +36,14 @@ final class DailyArtworkStore: ObservableObject {
 
     // MARK: - Private
 
-    /// The day string we currently display — used to detect date changes
     private var currentDayID: String
-
-    /// Timer that checks for midnight crossing
     private var midnightTimer: AnyCancellable?
-
-    /// Pre-cached artwork for tomorrow (loaded in background)
     private var tomorrowArtwork: DailyArtwork?
+    private var countPollTask: Task<Void, Never>?
+
+    /// Tracks whether we already reported completion for the current day
+    /// (prevents double-increment if the user re-opens the completed image)
+    private var didReportCompletion: Bool = false
 
     // MARK: - Init
 
@@ -48,9 +54,15 @@ final class DailyArtworkStore: ObservableObject {
         self.currentDayID = dayID
         self.filledRegionIDs = Self.loadProgress(for: a.id)
         self.selectedColorIndex = 0
+        self.didReportCompletion = Self.loadDidReport(for: dayID)
 
         startMidnightTimer()
         preCacheTomorrow()
+
+        // If already complete from a previous session, fetch the current count
+        if isComplete {
+            Task { await fetchCurrentCount() }
+        }
     }
 
     // MARK: - Derived
@@ -66,7 +78,6 @@ final class DailyArtworkStore: ObservableObject {
 
     // MARK: - Actions
 
-    /// Attempt to fill a region. Returns true if successful or already filled.
     func tryFill(regionID: Int) -> Bool {
         guard let region = artwork.regions.first(where: { $0.id == regionID }) else { return false }
         if filledRegionIDs.contains(regionID) { return true }
@@ -78,14 +89,52 @@ final class DailyArtworkStore: ObservableObject {
 
     func resetThisDayProgress() {
         filledRegionIDs = []
+        didReportCompletion = false
+        globalCount = 0
+        stopPolling()
+        Self.clearDidReport(for: currentDayID)
+    }
+
+    // MARK: - Completion + Counter
+
+    private func checkCompletion() {
+        guard isComplete, !didReportCompletion else { return }
+        didReportCompletion = true
+        Self.saveDidReport(for: currentDayID)
+
+        // Increment the global counter and start polling for live updates
+        Task {
+            let newCount = await OneHueAPI.incrementCount(for: currentDayID)
+            globalCount = newCount
+            startPolling()
+        }
+    }
+
+    private func fetchCurrentCount() async {
+        let count = await OneHueAPI.fetchCount(for: currentDayID)
+        globalCount = count
+    }
+
+    private func startPolling() {
+        stopPolling()
+        countPollTask = OneHueAPI.pollCount(for: currentDayID, interval: 15) { [weak self] count in
+            self?.globalCount = count
+        }
+    }
+
+    private func stopPolling() {
+        countPollTask?.cancel()
+        countPollTask = nil
     }
 
     // MARK: - Scene Phase
 
-    /// Call this from the view layer when the app returns to foreground.
-    /// Catches cases where the user left the app before midnight and returns after.
     func onForeground() {
         checkForNewDay()
+        // Refresh count if on the completion screen
+        if isComplete {
+            Task { await fetchCurrentCount() }
+        }
     }
 
     // MARK: - Debug Controls
@@ -97,7 +146,6 @@ final class DailyArtworkStore: ObservableObject {
     // MARK: - Midnight Handoff
 
     private func startMidnightTimer() {
-        // Check every 30 seconds. Light — no work unless the date actually changed.
         midnightTimer = Timer.publish(every: 30, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
@@ -108,24 +156,21 @@ final class DailyArtworkStore: ObservableObject {
     private func checkForNewDay() {
         let todayID = Self.dayString(offsetDays: debugDayOffset)
         guard todayID != currentDayID else { return }
-
-        // Date has changed — begin handoff
         performHandoff(to: todayID)
     }
 
     private func performHandoff(to newDayID: String) {
         guard handoffPhase == .idle else { return }
 
-        // Step 1: Fade out
+        stopPolling()
+
         withAnimation(.easeOut(duration: 0.6)) {
             handoffPhase = .fadingOut
         }
 
-        // Step 2: After fade out, swap the artwork
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) { [weak self] in
             guard let self else { return }
 
-            // Use pre-cached artwork if it matches, otherwise load fresh
             let newArtwork: DailyArtwork
             if let cached = self.tomorrowArtwork, cached.id == newDayID {
                 newArtwork = cached
@@ -138,13 +183,13 @@ final class DailyArtworkStore: ObservableObject {
             self.currentDayID = newDayID
             self.selectedColorIndex = 0
             self.filledRegionIDs = Self.loadProgress(for: newArtwork.id)
+            self.didReportCompletion = Self.loadDidReport(for: newDayID)
+            self.globalCount = 0
 
-            // Step 3: Fade in the new day
             withAnimation(.easeIn(duration: 0.6)) {
                 self.handoffPhase = .fadingIn
             }
 
-            // Step 4: Return to idle
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
                 self.handoffPhase = .idle
                 self.preCacheTomorrow()
@@ -154,11 +199,8 @@ final class DailyArtworkStore: ObservableObject {
 
     // MARK: - Pre-caching
 
-    /// Load tomorrow's artwork into memory so the midnight transition is instant.
     private func preCacheTomorrow() {
         let tomorrowID = Self.dayString(offsetDays: debugDayOffset + 1)
-        // Load on a background-friendly path (the load itself is synchronous bundle access,
-        // but we keep it off the hot path)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.tomorrowArtwork = Self.loadArtwork(dayID: tomorrowID)
         }
@@ -167,12 +209,15 @@ final class DailyArtworkStore: ObservableObject {
     // MARK: - Reload (debug)
 
     private func reloadForCurrentDay() {
+        stopPolling()
         let dayID = Self.dayString(offsetDays: debugDayOffset)
         let newArtwork = Self.loadArtwork(dayID: dayID)
         artwork = newArtwork
         currentDayID = dayID
         selectedColorIndex = 0
         filledRegionIDs = Self.loadProgress(for: newArtwork.id)
+        didReportCompletion = Self.loadDidReport(for: dayID)
+        globalCount = 0
         tomorrowArtwork = nil
         preCacheTomorrow()
     }
@@ -182,12 +227,10 @@ final class DailyArtworkStore: ObservableObject {
     private static func loadArtwork(dayID: String) -> DailyArtwork {
         let filename = "daily_\(dayID)"
 
-        // 1. Try JSON manifest (production path)
         if let a = try? DailyArtworkDecoder.loadBundledJSON(named: filename) {
             return a
         }
 
-        // 2. Try SVG file directly
         if let a = try? SVGDocumentParser.parse(
             svgNamed: filename,
             id: dayID,
@@ -198,7 +241,6 @@ final class DailyArtworkStore: ObservableObject {
             return a
         }
 
-        // 3. Fallback: mock artwork for development
         return makeMockArtwork(dayID: dayID)
     }
 
@@ -219,6 +261,17 @@ final class DailyArtworkStore: ObservableObject {
         "onehue.progress.\(dayID)"
     }
 
+    // Track whether we already incremented the counter for this day
+    private static func saveDidReport(for dayID: String) {
+        UserDefaults.standard.set(true, forKey: "onehue.reported.\(dayID)")
+    }
+    private static func loadDidReport(for dayID: String) -> Bool {
+        UserDefaults.standard.bool(forKey: "onehue.reported.\(dayID)")
+    }
+    private static func clearDidReport(for dayID: String) {
+        UserDefaults.standard.removeObject(forKey: "onehue.reported.\(dayID)")
+    }
+
     // MARK: - Date Helpers
 
     private static func dayString(offsetDays: Int) -> String {
@@ -237,14 +290,14 @@ final class DailyArtworkStore: ObservableObject {
 
     private static func makeMockArtwork(dayID: String) -> DailyArtwork {
         let palette: [Color] = [
-            Color(hex: "#FF6B9D"),  // 0: Rose Pink
-            Color(hex: "#FF8C42"),  // 1: Warm Orange
-            Color(hex: "#FFD166"),  // 2: Sunflower
-            Color(hex: "#06D6A0"),  // 3: Mint Green
-            Color(hex: "#118AB2"),  // 4: Ocean Blue
-            Color(hex: "#073B4C"),  // 5: Deep Navy
-            Color(hex: "#9B5DE5"),  // 6: Soft Purple
-            Color(hex: "#F15BB5"),  // 7: Hot Pink
+            Color(hex: "#FF6B9D"),
+            Color(hex: "#FF8C42"),
+            Color(hex: "#FFD166"),
+            Color(hex: "#06D6A0"),
+            Color(hex: "#118AB2"),
+            Color(hex: "#073B4C"),
+            Color(hex: "#9B5DE5"),
+            Color(hex: "#F15BB5"),
         ]
 
         var regions: [Region] = []
@@ -255,7 +308,6 @@ final class DailyArtworkStore: ObservableObject {
             id += 1
         }
 
-        // Outer ring segments (normalized 0...1)
         add(1, 0, Path { p in
             p.addArc(center: CGPoint(x: 0.5, y: 0.5), radius: 0.4,
                      startAngle: .degrees(-90), endAngle: .degrees(-30), clockwise: false)

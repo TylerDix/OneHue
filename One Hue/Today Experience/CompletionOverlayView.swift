@@ -11,6 +11,7 @@ struct CompletionOverlayView: View {
     @State private var showMessage = false
     @State private var showPostscript = false
     @State private var displayedCount: Int = 0
+    @State private var initialAnimationDone = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -25,6 +26,8 @@ struct CompletionOverlayView: View {
                     .lineSpacing(5)
                     .padding(.horizontal, 36)
                     .transition(.opacity.animation(.easeIn(duration: 0.8)))
+                    // Smoothly re-render when displayedCount changes from polling
+                    .contentTransition(.numericText())
             }
 
             // Quiet postscript — arrives a beat later
@@ -39,6 +42,14 @@ struct CompletionOverlayView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { beginReveal() }
+        .onChange(of: count) { _, newCount in
+            // After initial animation, smoothly update from polling
+            if initialAnimationDone {
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    displayedCount = newCount
+                }
+            }
+        }
     }
 
     // MARK: - Staged Reveal
@@ -65,24 +76,28 @@ struct CompletionOverlayView: View {
     // MARK: - Count Animation
 
     private func animateCount() {
-        guard count > 0 else {
-            displayedCount = count
+        let target = count
+        guard target > 0 else {
+            displayedCount = 0
+            initialAnimationDone = true
             return
         }
 
         // Roll up in ~1.8 seconds with easing (fast start, slow finish)
         let totalDuration: Double = 1.8
-        let steps = min(count, 60)  // cap frame count for smoothness
+        let steps = min(target, 60)
         let stepDuration = totalDuration / Double(steps)
 
         for step in 0...steps {
             let progress = Double(step) / Double(steps)
-            // Ease-out curve: fast at start, decelerates
             let eased = 1.0 - pow(1.0 - progress, 3)
-            let value = Int(Double(count) * eased)
+            let value = Int(Double(target) * eased)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(step)) {
                 displayedCount = value
+                if step == steps {
+                    initialAnimationDone = true
+                }
             }
         }
     }
@@ -95,4 +110,24 @@ struct CompletionOverlayView: View {
         )
         return message.replacingOccurrences(of: "[count]", with: countString)
     }
+}
+
+// MARK: - Previews
+
+#Preview("Completion") {
+    CompletionOverlayView(
+        message: "Today, [count] people traced the oldest wish in the world back into color. It still means what it always meant.",
+        count: 12_847
+    )
+    .background(.black)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Completion — Short") {
+    CompletionOverlayView(
+        message: "[count] people sat here today. None of them were alone.",
+        count: 3_291
+    )
+    .background(.black)
+    .preferredColorScheme(.dark)
 }
