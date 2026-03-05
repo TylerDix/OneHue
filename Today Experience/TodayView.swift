@@ -4,39 +4,48 @@ struct TodayView: View {
     @StateObject private var store = DailyArtworkStore()
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showSettings = false
-    @State private var showCompletion = false
+    @State private var showSettings    = false
+    @State private var showCompletion  = false
     @State private var wrongColorToast = false
-
-    // Completion sequence controls
     @State private var chromeOpacity: CGFloat = 1.0
-    @State private var canvasOpacity: CGFloat = 1.0
 
     var body: some View {
         ZStack {
-            // Main content
-            VStack(spacing: 8) {
-                header.opacity(chromeOpacity)
+            Color.black.ignoresSafeArea()
 
-                CanvasView(store: store) {
-                    showWrongColorToast()
+            VStack(spacing: 0) {
+
+                // Header — always visible
+                header
+                    .opacity(chromeOpacity)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+
+                // Canvas — fills remaining space between header and palette
+                CanvasView(store: store) { showWrongColorToast() }
+                    .aspectRatio(store.artwork.aspectRatio, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // Palette — only during painting
+                if store.phase == .painting {
+                    PaletteView(
+                        palette: store.artwork.palette,
+                        selectedIndex: $store.selectedColorIndex,
+                        filledCells: store.filledCells,
+                        artwork: store.artwork,
+                        isComplete: store.isComplete
+                    )
+                    .opacity(chromeOpacity)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
                 }
-                .opacity(canvasOpacity)
-                .allowsHitTesting(!store.isComplete)
-
-                PaletteView(
-                    palette: store.artwork.palette,
-                    selectedIndex: $store.selectedColorIndex,
-                    filledIDs: store.filledRegionIDs,
-                    regions: store.artwork.regions,
-                    isComplete: store.isComplete
-                )
-                .opacity(chromeOpacity)
             }
-            .padding(.top, 8)
-            .onChange(of: store.isComplete) { _, complete in
-                if complete { beginCompletionSequence() }
-                else { resetCompletionSequence() }
+            .onChange(of: store.phase) { _, phase in
+                withAnimation {
+                    if phase == .complete { beginCompletionSequence() }
+                    if phase == .pristine { resetCompletionSequence() }
+                }
             }
 
             // "Not that one" toast
@@ -48,21 +57,20 @@ struct TodayView: View {
                     .padding(.vertical, 10)
                     .background(
                         Capsule()
-                            .fill(.black.opacity(0.55))
+                            .fill(.black.opacity(0.6))
                             .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
                     )
                     .transition(.opacity)
-                    .padding(.top, 56)
+                    .padding(.top, 64)
                     .frame(maxHeight: .infinity, alignment: .top)
             }
 
-            // Completion overlay — floats over dimmed artwork
+            // Completion overlay
             if showCompletion {
                 CompletionOverlayView(
                     message: store.artwork.completionMessage,
                     count: store.globalCount,
                     onDebugDismiss: {
-                        // Long-press dismiss for testing — remove before shipping
                         store.resetThisDayProgress()
                         resetCompletionSequence()
                     }
@@ -70,31 +78,22 @@ struct TodayView: View {
                 .transition(.opacity)
             }
         }
-        // Midnight handoff
         .opacity(handoffOpacity)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                store.onForeground()
-            }
+            if phase == .active { store.onForeground() }
         }
         .onChange(of: store.handoffPhase) { _, phase in
-            if phase == .fadingIn {
-                resetCompletionSequence()
-            }
+            if phase == .fadingIn { resetCompletionSequence() }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
         }
     }
 
-    // MARK: - Handoff Opacity
+    // MARK: - Handoff
 
     private var handoffOpacity: CGFloat {
-        switch store.handoffPhase {
-        case .idle:      return 1.0
-        case .fadingOut: return 0.0
-        case .fadingIn:  return 1.0
-        }
+        store.handoffPhase == .fadingOut ? 0.0 : 1.0
     }
 
     // MARK: - Header
@@ -107,18 +106,19 @@ struct TodayView: View {
 
             Spacer()
 
-            Text(store.progressText)
-                .font(.system(size: 14, weight: .regular, design: .rounded))
-                .foregroundStyle(.white.opacity(0.7))
+            if store.phase == .painting {
+                Text(store.progressText)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .transition(.opacity)
+            }
 
-            Button {
-                showSettings = true
-            } label: {
+            Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(.white.opacity(0.7))
                     .padding(10)
-                    .background(Circle().fill(.white.opacity(0.10)))
+                    .background(Circle().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain)
         }
@@ -129,28 +129,15 @@ struct TodayView: View {
 
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
-
-        withAnimation(.easeOut(duration: 0.4)) {
-            chromeOpacity = 0.0
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.easeOut(duration: 0.6)) {
-                canvasOpacity = 0.35
-            }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            withAnimation(.easeIn(duration: 0.5)) {
-                showCompletion = true
-            }
+        withAnimation(.easeOut(duration: 0.5)) { chromeOpacity = 0.0 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeIn(duration: 0.6)) { showCompletion = true }
         }
     }
 
     private func resetCompletionSequence() {
         showCompletion = false
-        chromeOpacity = 1.0
-        canvasOpacity = 1.0
+        withAnimation(.easeIn(duration: 0.3)) { chromeOpacity = 1.0 }
     }
 
     // MARK: - Wrong Color Toast
@@ -166,7 +153,12 @@ struct TodayView: View {
 
 // MARK: - Previews
 
-#Preview("Today") {
-    TodayView()
-        .preferredColorScheme(.dark)
+#Preview("Pristine") {
+    TodayView().preferredColorScheme(.dark)
+}
+
+#Preview("Painting") {
+    let store = DailyArtworkStore()
+    store.beginPainting()
+    return TodayView().preferredColorScheme(.dark)
 }
