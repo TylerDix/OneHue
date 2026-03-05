@@ -10,9 +10,33 @@
 		2F26CF0B2F591E0E00D23AB3 /* One Hue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "One Hue.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2F26CF922F59320F00D23AB3 /* Exceptions for "One Hue" folder in "One Hue" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"DailyArtworks/daily_2026-03-04.json",
+			);
+			target = 2F26CF0A2F591E0E00D23AB3 /* One Hue */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		2F26CF932F59320F00D23AB3 /* Exceptions for "One Hue" folder in "Compile Sources" phase from "One Hue" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 2F26CF072F591E0E00D23AB3 /* Sources */;
+			membershipExceptions = (
+				"DailyArtworks/daily_2026-03-04.json",
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2F26CF0D2F591E0E00D23AB3 /* One Hue */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2F26CF922F59320F00D23AB3 /* Exceptions for "One Hue" folder in "One Hue" target */,
+				2F26CF932F59320F00D23AB3 /* Exceptions for "One Hue" folder in "Compile Sources" phase from "One Hue" target */,
+			);
 			path = "One Hue";
 			sourceTree = "<group>";
 		};

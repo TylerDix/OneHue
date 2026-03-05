@@ -13,8 +13,21 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section("Daily") {
+                    Text("Day ID: \(store.artwork.id)")
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Debug") {
-                    Button("Reset Today Progress") {
+                    HStack {
+                        Button("Prev Day") { store.debugPrevDay() }
+                        Spacer()
+                        Button("Today") { store.debugBackToToday() }
+                        Spacer()
+                        Button("Next Day") { store.debugNextDay() }
+                    }
+
+                    Button("Reset This Day Progress") {
                         store.resetToday()
                     }
                 }

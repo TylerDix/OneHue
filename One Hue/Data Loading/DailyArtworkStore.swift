@@ -4,41 +4,31 @@ import Combine
 @MainActor
 final class DailyArtworkStore: ObservableObject {
 
-    // MARK: - Published state
-
     @Published private(set) var artwork: DailyArtwork
     @Published var selectedColorIndex: Int = 0
-    @Published var filledRegionIDs: Set<Int> = [] {
-        didSet { persistProgress() }
+    @Published var filledRegionIDs: Set<Int> = [] { didSet { persistProgress() } }
+
+    // Debug day offset (0 = today)
+    @Published var debugDayOffset: Int = 0 {
+        didSet { reloadForCurrentDay() }
     }
 
-    // MARK: - Init
-
     init() {
-        self.artwork = Self.makeMockArtworkForToday()
+        self.artwork = Self.loadArtwork(dayID: Self.dayString(offsetDays: 0))
         self.filledRegionIDs = Self.loadProgress(for: artwork.id)
     }
 
     // MARK: - Derived
 
-    var isComplete: Bool {
-        filledRegionIDs.count == artwork.regions.count
-    }
-
-    var progressText: String {
-        "\(filledRegionIDs.count) / \(artwork.regions.count)"
-    }
+    var isComplete: Bool { filledRegionIDs.count == artwork.regions.count }
+    var progressText: String { "\(filledRegionIDs.count) / \(artwork.regions.count)" }
 
     // MARK: - Actions
 
-    /// Enforces "correct color only".
-    /// Returns true if fill happened (or was already filled), false if wrong color.
     func tryFill(regionID: Int) -> Bool {
         guard let region = artwork.regions.first(where: { $0.id == regionID }) else { return false }
         if filledRegionIDs.contains(regionID) { return true }
-
         guard selectedColorIndex == region.colorIndex else { return false }
-
         filledRegionIDs.insert(regionID)
         return true
     }
@@ -47,7 +37,30 @@ final class DailyArtworkStore: ObservableObject {
         filledRegionIDs = []
     }
 
-    // MARK: - Persistence (UserDefaults)
+    func debugPrevDay() { debugDayOffset -= 1 }
+    func debugNextDay() { debugDayOffset += 1 }
+    func debugBackToToday() { debugDayOffset = 0 }
+
+    // MARK: - Daily reload
+
+    private func reloadForCurrentDay() {
+        let dayID = Self.dayString(offsetDays: debugDayOffset)
+        let newArtwork = Self.loadArtwork(dayID: dayID)
+
+        artwork = newArtwork
+        selectedColorIndex = 0
+        filledRegionIDs = Self.loadProgress(for: newArtwork.id)
+    }
+
+    private static func loadArtwork(dayID: String) -> DailyArtwork {
+        let filename = "daily_\(dayID)"
+        if let a = try? DailyArtworkDecoder.loadBundledJSON(named: filename) {
+            return a
+        }
+        return makeMockArtwork(dayID: dayID)
+    }
+
+    // MARK: - Persistence
 
     private func persistProgress() {
         let key = Self.progressKey(for: artwork.id)
@@ -64,12 +77,24 @@ final class DailyArtworkStore: ObservableObject {
         "onehue.progress.\(dayID)"
     }
 
-    // MARK: - Mock Artwork (replace later with SVG -> regions)
+    // MARK: - Date helpers
 
-    private static func makeMockArtworkForToday() -> DailyArtwork {
-        let palette: [Color] = [
-            .red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink, .white, .gray
-        ]
+    private static func dayString(offsetDays: Int) -> String {
+        let cal = Calendar(identifier: .gregorian)
+        let base = cal.startOfDay(for: Date())
+        let date = cal.date(byAdding: .day, value: offsetDays, to: base) ?? base
+
+        let f = DateFormatter()
+        f.calendar = cal
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
+    }
+
+    // MARK: - Mock fallback
+
+    private static func makeMockArtwork(dayID: String) -> DailyArtwork {
+        let palette: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink]
 
         var regions: [Region] = []
         var id = 0
@@ -93,19 +118,11 @@ final class DailyArtworkStore: ObservableObject {
         add(8, 7, Path(ellipseIn: CGRect(x: 0.48, y: 0.74, width: 0.10, height: 0.10)))
 
         return DailyArtwork(
-            id: Self.todayString(),
+            id: dayID,
             title: "Today",
             completionMessage: "Nice. A little calmer now.",
             palette: palette,
             regions: regions
         )
-    }
-
-    private static func todayString() -> String {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: Date())
     }
 }
