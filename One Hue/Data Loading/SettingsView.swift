@@ -29,11 +29,8 @@ struct SettingsView: View {
                         }
                     }
                     .onChange(of: dailyReminderEnabled) { _, enabled in
-                        if enabled {
-                            requestAndScheduleReminder()
-                        } else {
-                            cancelReminder()
-                        }
+                        if enabled { requestAndScheduleReminder() }
+                        else { cancelReminder() }
                     }
                 }
 
@@ -66,14 +63,8 @@ struct SettingsView: View {
                     .listRowBackground(Color.clear)
                     .onTapGesture {
                         debugTapCount += 1
-                        if debugTapCount >= 5 {
-                            showDebug = true
-                            debugTapCount = 0
-                        }
-                        // Reset after 2 seconds of inactivity
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            debugTapCount = 0
-                        }
+                        if debugTapCount >= 5 { showDebug = true; debugTapCount = 0 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { debugTapCount = 0 }
                     }
                 }
 
@@ -83,7 +74,7 @@ struct SettingsView: View {
                         VStack(spacing: 10) {
                             HStack(spacing: 10) {
                                 debugButton("Prev Day") { store.debugPrevDay() }
-                                debugButton("Today") { store.debugBackToToday() }
+                                debugButton("Today")    { store.debugBackToToday() }
                                 debugButton("Next Day") { store.debugNextDay() }
                             }
 
@@ -95,13 +86,27 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.bordered)
 
+                            Button {
+                                store.debugForceComplete()
+                                dismiss()
+                            } label: {
+                                Text("Force Complete")
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            }
+                            .buttonStyle(.bordered)
+
                             LabeledContent("Day") {
                                 Text(store.artwork.id)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }
-                            LabeledContent("Regions") {
-                                Text("\(store.artwork.regions.count)")
+                            LabeledContent("Grid") {
+                                Text("\(store.artwork.cols)×\(store.artwork.rows)")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                            LabeledContent("Fillable cells") {
+                                Text("\(store.artwork.fillableCellCount)")
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }
@@ -109,6 +114,10 @@ struct SettingsView: View {
                                 Text("\(store.artwork.palette.count)")
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
+                            }
+                            LabeledContent("Phase") {
+                                Text("\(store.phase)")
+                                    .foregroundStyle(.secondary)
                             }
                         }
                         .padding(.vertical, 4)
@@ -129,8 +138,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func debugButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .frame(maxWidth: .infinity)
+            Text(title).frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)
@@ -139,17 +147,13 @@ struct SettingsView: View {
     // MARK: - Notifications
 
     private func requestAndScheduleReminder() {
-        let center = UNUserNotificationCenter.current()
-
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            DispatchQueue.main.async {
-                if granted {
-                    scheduleDaily()
-                } else {
-                    dailyReminderEnabled = false
+        UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                DispatchQueue.main.async {
+                    if granted { scheduleDaily() }
+                    else { dailyReminderEnabled = false }
                 }
             }
-        }
     }
 
     private func scheduleDaily() {
@@ -158,26 +162,17 @@ struct SettingsView: View {
 
         let content = UNMutableNotificationContent()
         content.title = "One Hue"
-        content.body = "Today's image is waiting."
+        content.body  = "Today's image is waiting."
         content.sound = .default
 
-        // Fire daily at 9:00 AM local time
-        var dateComponents = DateComponents()
-        dateComponents.hour = 9
-        dateComponents.minute = 0
+        var dc = DateComponents()
+        dc.hour = 9; dc.minute = 0
 
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: dateComponents,
-            repeats: true
-        )
-
-        let request = UNNotificationRequest(
+        center.add(UNNotificationRequest(
             identifier: "onehue.daily",
             content: content,
-            trigger: trigger
-        )
-
-        center.add(request)
+            trigger: UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+        ))
     }
 
     private func cancelReminder() {
@@ -193,32 +188,26 @@ struct AboutView: View {
             VStack(spacing: 32) {
                 Spacer(minLength: 20)
 
-                // App name
                 VStack(spacing: 8) {
                     Text("One Hue")
                         .font(.system(size: 32, weight: .light, design: .serif))
                         .foregroundStyle(.white.opacity(0.9))
                     Text("One image. One world. One day.")
-                        .font(.system(size: 15, weight: .regular, design: .default))
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
-                // Philosophy
                 VStack(spacing: 16) {
                     aboutParagraph("Every day, one image appears — the same image for every person on Earth. You color it in. When you finish, you see how many others did too. Then the app goes quiet until tomorrow.")
-
                     aboutParagraph("There are no streaks, no leaderboards, no points. No ads, no accounts, no profiles. Nothing to optimize. Just a single daily act of focus and beauty, shared with the world.")
-
                     aboutParagraph("The intent is simple: one moment of sustained attention in a world that takes it from you constantly.")
                 }
                 .padding(.horizontal, 28)
 
-                // Dedication — its own quiet moment
                 VStack(spacing: 18) {
                     Rectangle()
                         .fill(.white.opacity(0.06))
                         .frame(width: 56, height: 0.5)
-
                     Text("For Joelle Kline")
                         .font(.system(size: 15, weight: .regular, design: .serif))
                         .foregroundStyle(.white.opacity(0.45))
@@ -236,7 +225,7 @@ struct AboutView: View {
 
     private func aboutParagraph(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 15, weight: .regular, design: .default))
+            .font(.system(size: 15, weight: .regular))
             .foregroundStyle(.white.opacity(0.7))
             .lineSpacing(4)
             .multilineTextAlignment(.center)
@@ -247,11 +236,10 @@ struct AboutView: View {
 
 #Preview("Settings") {
     SettingsView(store: DailyArtworkStore())
+        .preferredColorScheme(.dark)
 }
 
 #Preview("About") {
-    NavigationStack {
-        AboutView()
-    }
-    .preferredColorScheme(.dark)
+    NavigationStack { AboutView() }
+        .preferredColorScheme(.dark)
 }
