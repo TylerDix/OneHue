@@ -4,6 +4,7 @@ struct CanvasRenderer: View {
     let artwork: DailyArtwork
     let filled: Set<Int>
     let pulse: FillPulse?
+    var numberOpacity: CGFloat = 0.55
 
     var body: some View {
         GeometryReader { geo in
@@ -20,42 +21,50 @@ struct CanvasRenderer: View {
 
                 // Regions
                 ForEach(artwork.regions) { region in
-                    let scaled = HitTest.scaledPath(region.path, to: size)
-                    let isFilled = filled.contains(region.id)
-                    let color = artwork.palette[safe: region.colorIndex] ?? .gray
-
-                    ZStack {
-                        // Region fill — simple color fade, no bloom, no scale
-                        scaled
-                            .fill(isFilled ? color : Color.white.opacity(0.06))
-                            .overlay(
-                                scaled.stroke(
-                                    isFilled ? color.opacity(0.3) : .white.opacity(0.15),
-                                    lineWidth: isFilled ? 0.5 : 1
-                                )
-                            )
-
-                        // Number label (fades away on fill)
-                        if !isFilled {
-                            let labelPoint = regionLabelPoint(region, scaledPath: scaled, viewSize: size)
-                            Text("\(region.number)")
-                                .font(.system(
-                                    size: numberFontSize(for: scaled, base: min(size.width, size.height)),
-                                    weight: .semibold,
-                                    design: .rounded
-                                ))
-                                .foregroundStyle(.white.opacity(0.55))
-                                .position(labelPoint)
-                                .allowsHitTesting(false)
-                                .transition(.opacity)
-                        }
-                    }
-                    .animation(.easeOut(duration: FillAnimation.duration), value: isFilled)
+                    regionView(region: region, size: size)
                 }
             }
             .padding(10)
         }
         .aspectRatio(artwork.aspectRatio, contentMode: .fit)
+    }
+
+    // MARK: - Region View
+
+    @ViewBuilder
+    private func regionView(region: Region, size: CGSize) -> some View {
+        let scaled = HitTest.scaledPath(region.path, to: size)
+        let isFilled = filled.contains(region.id)
+        let color = artwork.palette[safe: region.colorIndex] ?? .gray
+        let labelPoint = regionLabelPoint(region, scaledPath: scaled, viewSize: size)
+
+        ZStack {
+            // Region fill:
+            // - Filled: full color
+            // - Unfilled: faint tint of the target color (so overview shows the image shape)
+            scaled
+                .fill(isFilled ? color : color.opacity(0.08))
+                .overlay(
+                    scaled.stroke(
+                        isFilled ? color.opacity(0.3) : .white.opacity(0.2),
+                        lineWidth: isFilled ? 0.5 : 0.75
+                    )
+                )
+
+            // Number label — opacity controlled by zoom level
+            if !isFilled && numberOpacity > 0.01 {
+                Text("\(region.number)")
+                    .font(.system(
+                        size: numberFontSize(for: scaled, base: min(size.width, size.height)),
+                        weight: .semibold,
+                        design: .rounded
+                    ))
+                    .foregroundStyle(.white.opacity(numberOpacity))
+                    .position(labelPoint)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: FillAnimation.duration), value: isFilled)
     }
 
     // MARK: - Helpers
@@ -81,4 +90,34 @@ extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
     }
+}
+
+// MARK: - Previews
+
+#Preview("Canvas — Mock") {
+    let store = DailyArtworkStore()
+
+    CanvasRenderer(
+        artwork: store.artwork,
+        filled: [],
+        pulse: nil,
+        numberOpacity: 0.55
+    )
+    .frame(width: 400, height: 400)
+    .background(.black)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Canvas — Numbers hidden") {
+    let store = DailyArtworkStore()
+
+    CanvasRenderer(
+        artwork: store.artwork,
+        filled: [],
+        pulse: nil,
+        numberOpacity: 0
+    )
+    .frame(width: 400, height: 400)
+    .background(.black)
+    .preferredColorScheme(.dark)
 }

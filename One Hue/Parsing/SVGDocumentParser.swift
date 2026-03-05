@@ -58,46 +58,57 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
             throw parser.error ?? OneHueError.parseFailed("Unknown XML error")
         }
 
-        // Parse the CSS <style> block if present
-        parser.parseCSSStyles()
-
         guard !parser.rawRegions.isEmpty else {
             throw OneHueError.noRegions
         }
 
-        // Build palette from discovered fill colors
-        let sortedColors = parser.colorOrder
-        let palette: [Color] = sortedColors.map { Color(hex: $0) }
-
-        var hexToIndex: [String: Int] = [:]
-        for (i, hex) in sortedColors.enumerated() {
-            hexToIndex[hex] = i
-        }
-
-        // Normalize paths to 0...1 coordinate space
+        // Coordinate space
         let vw = parser.viewBoxW > 0 ? parser.viewBoxW : parser.svgWidth
         let vh = parser.viewBoxH > 0 ? parser.viewBoxH : parser.svgHeight
         guard vw > 0, vh > 0 else {
             throw OneHueError.parseFailed("SVG has no viewBox or width/height")
         }
 
-        let regions: [Region] = parser.rawRegions.enumerated().map { idx, raw in
+        // Filter out background regions (paths covering nearly the full canvas)
+        let filteredRaw = parser.rawRegions.filter { raw in
+            let path = SVGPathParser.path(from: raw.pathData)
+            let finalPath: Path
+            if let t = raw.transform {
+                finalPath = path.applying(t)
+            } else {
+                finalPath = path
+            }
+            let bounds = finalPath.boundingRect
+            let coverageW = bounds.width / vw
+            let coverageH = bounds.height / vh
+            // Skip if this path covers more than 90% of the canvas in both dimensions
+            return !(coverageW > 0.9 && coverageH > 0.9)
+        }
+
+        // Rebuild palette from only the colors used in filtered regions
+        let usedHexes = Set(filteredRaw.map { $0.fillHex })
+        let filteredColors = parser.colorOrder.filter { usedHexes.contains($0) }
+        let palette: [Color] = filteredColors.map { Color(hex: $0) }
+
+        var hexToIndex: [String: Int] = [:]
+        for (i, hex) in filteredColors.enumerated() {
+            hexToIndex[hex] = i
+        }
+
+        let regions: [Region] = filteredRaw.enumerated().map { idx, raw in
             let originalPath = SVGPathParser.path(from: raw.pathData)
 
-            // Normalize to 0...1
-            var normalized = originalPath.applying(
+            // Apply transform first if present, then normalize
+            let toNormalize: Path
+            if let t = raw.transform {
+                toNormalize = originalPath.applying(t)
+            } else {
+                toNormalize = originalPath
+            }
+
+            let normalized = toNormalize.applying(
                 CGAffineTransform(scaleX: 1.0 / vw, y: 1.0 / vh)
             )
-
-            // Apply transform if present (e.g. rotated rects from Illustrator)
-            if let t = raw.transform {
-                // The transform is in original coordinates, so we need to apply it
-                // before normalization. Re-do: apply transform to original, then normalize.
-                let transformed = originalPath.applying(t)
-                normalized = transformed.applying(
-                    CGAffineTransform(scaleX: 1.0 / vw, y: 1.0 / vh)
-                )
-            }
 
             let colorIdx = hexToIndex[raw.fillHex] ?? 0
 
@@ -223,6 +234,8 @@ final class SVGDocumentParser: NSObject, XMLParserDelegate {
         }
         if el.lowercased() == "style" {
             insideStyle = false
+            // Parse CSS immediately so class lookups work for subsequent elements
+            parseCSSStyles()
         }
     }
 

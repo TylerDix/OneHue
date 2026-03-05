@@ -6,6 +6,7 @@ struct CompletionOverlayView: View {
 
     let message: String
     let count: Int
+    var onDebugDismiss: (() -> Void)? = nil
 
     // Staged reveal
     @State private var showMessage = false
@@ -26,7 +27,6 @@ struct CompletionOverlayView: View {
                     .lineSpacing(5)
                     .padding(.horizontal, 36)
                     .transition(.opacity.animation(.easeIn(duration: 0.8)))
-                    // Smoothly re-render when displayedCount changes from polling
                     .contentTransition(.numericText())
             }
 
@@ -43,29 +43,29 @@ struct CompletionOverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { beginReveal() }
         .onChange(of: count) { _, newCount in
-            // After initial animation, smoothly update from polling
             if initialAnimationDone {
                 withAnimation(.easeInOut(duration: 0.4)) {
                     displayedCount = newCount
                 }
             }
         }
+        // Long-press to dismiss (debug only — remove before shipping)
+        .onLongPressGesture(minimumDuration: 1.5) {
+            onDebugDismiss?()
+        }
     }
 
     // MARK: - Staged Reveal
 
     private func beginReveal() {
-        // 1. Message fades in
         withAnimation(.easeIn(duration: 0.8)) {
             showMessage = true
         }
 
-        // 2. Count rolls up over ~1.8s, starting after a short beat
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             animateCount()
         }
 
-        // 3. "See you tomorrow" arrives quietly, well after the message
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation(.easeIn(duration: 0.6)) {
                 showPostscript = true
@@ -83,7 +83,6 @@ struct CompletionOverlayView: View {
             return
         }
 
-        // Roll up in ~1.8 seconds with easing (fast start, slow finish)
         let totalDuration: Double = 1.8
         let steps = min(target, 60)
         let stepDuration = totalDuration / Double(steps)
@@ -118,15 +117,6 @@ struct CompletionOverlayView: View {
     CompletionOverlayView(
         message: "Today, [count] people traced the oldest wish in the world back into color. It still means what it always meant.",
         count: 12_847
-    )
-    .background(.black)
-    .preferredColorScheme(.dark)
-}
-
-#Preview("Completion — Short") {
-    CompletionOverlayView(
-        message: "[count] people sat here today. None of them were alone.",
-        count: 3_291
     )
     .background(.black)
     .preferredColorScheme(.dark)

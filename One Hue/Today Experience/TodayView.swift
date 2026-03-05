@@ -15,13 +15,12 @@ struct TodayView: View {
     var body: some View {
         ZStack {
             // Main content
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 header.opacity(chromeOpacity)
 
                 CanvasView(store: store) {
                     showWrongColorToast()
                 }
-                .padding(.horizontal, 18)
                 .opacity(canvasOpacity)
                 .allowsHitTesting(!store.isComplete)
 
@@ -33,10 +32,8 @@ struct TodayView: View {
                     isComplete: store.isComplete
                 )
                 .opacity(chromeOpacity)
-
-                Spacer(minLength: 10)
             }
-            .padding(.top, 14)
+            .padding(.top, 8)
             .onChange(of: store.isComplete) { _, complete in
                 if complete { beginCompletionSequence() }
                 else { resetCompletionSequence() }
@@ -63,12 +60,17 @@ struct TodayView: View {
             if showCompletion {
                 CompletionOverlayView(
                     message: store.artwork.completionMessage,
-                    count: store.globalCount
+                    count: store.globalCount,
+                    onDebugDismiss: {
+                        // Long-press dismiss for testing — remove before shipping
+                        store.resetThisDayProgress()
+                        resetCompletionSequence()
+                    }
                 )
                 .transition(.opacity)
             }
         }
-        // Midnight handoff: fade the entire view during transition
+        // Midnight handoff
         .opacity(handoffOpacity)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -77,7 +79,6 @@ struct TodayView: View {
         }
         .onChange(of: store.handoffPhase) { _, phase in
             if phase == .fadingIn {
-                // New day loaded — reset completion state for fresh canvas
                 resetCompletionSequence()
             }
         }
@@ -129,19 +130,16 @@ struct TodayView: View {
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
 
-        // Chrome fades out
         withAnimation(.easeOut(duration: 0.4)) {
             chromeOpacity = 0.0
         }
 
-        // Artwork dims to backdrop
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeOut(duration: 0.6)) {
                 canvasOpacity = 0.35
             }
         }
 
-        // Message floats in
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             withAnimation(.easeIn(duration: 0.5)) {
                 showCompletion = true
@@ -164,4 +162,11 @@ struct TodayView: View {
             withAnimation(.easeOut(duration: 0.2)) { wrongColorToast = false }
         }
     }
+}
+
+// MARK: - Previews
+
+#Preview("Today") {
+    TodayView()
+        .preferredColorScheme(.dark)
 }
