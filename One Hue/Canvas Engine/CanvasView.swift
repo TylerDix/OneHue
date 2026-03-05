@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - CanvasView
+
 struct CanvasView: View {
     @ObservedObject var store: DailyArtworkStore
     var onWrongColor: () -> Void = {}
@@ -10,13 +12,14 @@ struct CanvasView: View {
     @State private var offset: CGSize       = .zero
     @State private var lastOffset: CGSize   = .zero
 
-    // Grid interaction
-    @State private var lastFilledCell: GridCell? = nil
-
     // Phase-driven animation values
-    @State private var imageOpacity: CGFloat = 0.0   // 0 during painting, 1 on complete
-    @State private var gridOpacity: CGFloat  = 0.0   // 0 pristine, 1 painting, 0 complete
+    @State private var imageOpacity: CGFloat = 1.0
+    @State private var gridOpacity: CGFloat  = 0.0
     @State private var showHint: Bool        = true
+
+    // Paint-lock state
+    // Locked = finger is actively painting; unlocked = finger may pan
+    @State private var isLocked: Bool = false
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
@@ -27,7 +30,7 @@ struct CanvasView: View {
             let cs = cellSize(renderSize: renderSize)
 
             ZStack {
-                // ── Layer 1: Source image — hidden during painting, revealed on complete ──
+                // ── Layer 1: Source image ──
                 if let img = store.artwork.sourceImage {
                     Image(uiImage: img)
                         .resizable()
@@ -37,7 +40,7 @@ struct CanvasView: View {
                         .allowsHitTesting(false)
                 }
 
-                // ── Layer 2: Grid — black bg with grey outlines, colors fill in ──
+                // ── Layer 2: Grid ──
                 GridRenderer(
                     artwork: store.artwork,
                     filledCells: store.filledCells,
@@ -51,7 +54,7 @@ struct CanvasView: View {
                 if showHint {
                     Text("Tap to begin")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.white.opacity(0.7))
                         .transition(.opacity)
                 }
             }
@@ -65,13 +68,8 @@ struct CanvasView: View {
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
         .clipped()
-        .onChange(of: store.phase) { _, phase in
-            animate(to: phase)
-        }
-        .onAppear {
-            // Restore correct visual state if app reopened mid-session
-            animate(to: store.phase)
-        }
+        .onChange(of: store.phase) { _, phase in animate(to: phase) }
+        .onAppear { animate(to: store.phase) }
     }
 
     // MARK: - Phase Animation
@@ -79,16 +77,15 @@ struct CanvasView: View {
     private func animate(to phase: ArtworkPhase) {
         switch phase {
         case .pristine:
-            // Pure black, hint visible, no grid, no image
             withAnimation(.easeInOut(duration: 0.5)) {
                 gridOpacity  = 0.0
-                imageOpacity = 0.0
+                imageOpacity = 1.0
                 showHint     = true
             }
             resetZoom()
+            isLocked = false
 
         case .painting:
-            // Grid pops in over black, hint disappears, image stays hidden
             withAnimation(.easeOut(duration: 0.2)) { showHint = false }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
                 gridOpacity  = 1.0
@@ -96,9 +93,9 @@ struct CanvasView: View {
             }
 
         case .complete:
-            // Grid dissolves, full-quality image fades in as the reward
             withAnimation(.easeOut(duration: 1.0)) { gridOpacity = 0.0 }
             withAnimation(.easeIn(duration: 1.2).delay(0.3)) { imageOpacity = 1.0 }
+            isLocked = false
         }
     }
 
@@ -107,24 +104,66 @@ struct CanvasView: View {
     private func paintGesture(geo: GeometryProxy, renderSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
+                let loc = value.location
                 guard store.phase == .painting else { return }
-                if let cell = screenToCell(value.location, geo: geo, renderSize: renderSize),
-                   cell != lastFilledCell {
-                    lastFilledCell = cell
-                    if store.tryFill(col: cell.col, row: cell.row) == .wrongColor {
-                        throttleWrongColor()
+
+                // ── While locked: paint freely, no pan ──
+                if isLocked {
+                    if let cell = screenToCell(loc, geo: geo, renderSize: renderSize) {
+                        let result = store.tryFill(col: cell.col, row: cell.row)
+                        if result == .wrongColor { throttleWrongColor() }
                     }
+                    return
+                }
+
+                // ── First touch: decide paint or pan ──
+                guard let cell = screenToCell(loc, geo: geo, renderSize: renderSize) else {
+                    panIfZoomed(value: value)
+                    return
+                }
+
+                let colorIdx   = store.artwork.colorIndex(col: cell.col, row: cell.row)
+                let isCorrect  = colorIdx == store.selectedColorIndex
+                               && !store.artwork.isNonInteractive(colorIdx)
+                let needsFill  = store.filledCells[cell] == nil
+
+                if isCorrect && needsFill {
+                    // Unfilled correct cell → lock and paint this cell
+                    isLocked = true
+                    let result = store.tryFill(col: cell.col, row: cell.row)
+                    if result == .wrongColor { throttleWrongColor() }
+                } else {
+                    // Filled, wrong color, or background → pan
+                    let dist = hypot(value.translation.width, value.translation.height)
+                    if dist > 6 { panIfZoomed(value: value) }
                 }
             }
             .onEnded { value in
-                lastFilledCell = nil
+                // Pristine tap → begin painting
                 if store.phase == .pristine {
-                    let d = value.translation
-                    if sqrt(d.width * d.width + d.height * d.height) < 10 {
+                    if hypot(value.translation.width, value.translation.height) < 10 {
                         store.beginPainting()
                     }
+                    return
                 }
+
+                guard store.phase == .painting else { return }
+
+                // Always unlock on finger lift — never leave canvas permanently locked
+                isLocked = false
+                lastOffset = offset
+                clampOffset()
             }
+    }
+
+    // MARK: - Pan helpers
+
+    private func panIfZoomed(value: DragGesture.Value) {
+        guard currentZoom > 1.05 else { return }
+        offset = CGSize(
+            width:  lastOffset.width  + value.translation.width,
+            height: lastOffset.height + value.translation.height
+        )
     }
 
     private var zoomGesture: some Gesture {
@@ -141,13 +180,14 @@ struct CanvasView: View {
     private func panGesture(renderSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
-                guard currentZoom > 1.05 else { return }
+                guard !isLocked, currentZoom > 1.05 else { return }
                 offset = CGSize(
                     width:  lastOffset.width  + value.translation.width,
                     height: lastOffset.height + value.translation.height
                 )
             }
             .onEnded { _ in
+                guard !isLocked else { return }
                 lastOffset = offset
                 clampOffset()
             }
@@ -249,10 +289,8 @@ struct GridRenderer: View {
                     let cell = GridCell(col: col, row: row)
 
                     if let filledIdx = filledCells[cell] {
-                        // Filled — solid color, no border
                         context.fill(Path(rect), with: .color(artwork.palette[filledIdx]))
                     } else {
-                        // Unfilled — pure black cell, subtle grey border, dim number
                         context.fill(Path(rect), with: .color(.black))
                         context.stroke(Path(rect),
                                        with: .color(.white.opacity(0.15)),
@@ -260,8 +298,8 @@ struct GridRenderer: View {
                         if cw > 9 {
                             var text = AttributedString("\(colorIdx + 1)")
                             text.font = .system(size: min(cw * 0.42, 10),
-                                                weight: .regular, design: .rounded)
-                            text.foregroundColor = .white.opacity(0.25)
+                                                weight: .medium, design: .rounded)
+                            text.foregroundColor = .white.opacity(0.55)
                             context.draw(Text(text),
                                          at: CGPoint(x: rect.midX, y: rect.midY),
                                          anchor: .center)
@@ -276,25 +314,75 @@ struct GridRenderer: View {
 // MARK: - Previews
 
 #if DEBUG
-#Preview("Pristine — pure black") {
-    CanvasView(store: DailyArtworkStore())
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+#Preview("Pristine") {
+    TodayView()
+        .preferredColorScheme(.dark)
 }
 
-#Preview("Painting — dark grid") {
+#Preview("Painting") {
     let store = DailyArtworkStore()
-    let _ = { store.beginPainting() }()
-    return CanvasView(store: store)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+    store.beginPainting()
+    return TodayView_WithStore(store: store)
+        .preferredColorScheme(.dark)
 }
 
-#Preview("Complete — image revealed") {
+#Preview("Complete") {
     let store = DailyArtworkStore()
-    let _ = { store.debugForceComplete() }()
-    return CanvasView(store: store)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+    store.debugForceComplete()
+    return TodayView_WithStore(store: store)
+        .preferredColorScheme(.dark)
+}
+
+// Thin wrapper to inject a pre-built store into a TodayView-like layout for previews
+private struct TodayView_WithStore: View {
+    @ObservedObject var store: DailyArtworkStore
+    @State private var wrongColorToast = false
+    @State private var showSettings = false
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                HStack {
+                    Text(store.artwork.title)
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Spacer()
+                    if store.phase == .painting {
+                        Text(store.progressText)
+                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .padding(10)
+                            .background(Circle().fill(.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+
+                CanvasView(store: store) { wrongColorToast = true }
+                    .aspectRatio(store.artwork.aspectRatio, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if store.phase == .painting {
+                    PaletteView(
+                        palette: store.artwork.palette,
+                        selectedIndex: $store.selectedColorIndex,
+                        filledCells: store.filledCells,
+                        artwork: store.artwork,
+                        isComplete: store.isComplete
+                    )
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+                }
+            }
+        }
+    }
 }
 #endif
