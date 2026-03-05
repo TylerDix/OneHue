@@ -6,6 +6,7 @@ struct CanvasView: View {
 
     @State private var lastRegionID: Int? = nil
     @State private var pulse: FillPulse? = nil
+    @State private var lastWrongTrigger: Date = .distantPast
 
     var body: some View {
         GeometryReader { geo in
@@ -23,15 +24,20 @@ struct CanvasView: View {
                     .onChanged { value in
                         let point = value.location
 
-                        if let id = HitTest.regionID(at: point, in: renderSize, regions: store.artwork.regions) {
-                            guard id != lastRegionID else { return }
-                            lastRegionID = id
+                        guard let id = HitTest.regionID(
+                            at: point,
+                            in: renderSize,
+                            regions: store.artwork.regions,
+                            tolerance: 8
+                        ) else { return }
 
-                            if store.tryFill(regionID: id) {
-                                triggerPulse(regionID: id)
-                            } else {
-                                onWrongColor()
-                            }
+                        guard id != lastRegionID else { return }
+                        lastRegionID = id
+
+                        if store.tryFill(regionID: id) {
+                            triggerPulse(regionID: id)
+                        } else {
+                            throttleWrongColor()
                         }
                     }
                     .onEnded { _ in
@@ -43,8 +49,17 @@ struct CanvasView: View {
 
     private func triggerPulse(regionID: Int) {
         pulse = FillPulse(regionID: regionID, trigger: UUID())
+        // Pulse retained briefly for future haptic/sound hooks
         DispatchQueue.main.asyncAfter(deadline: .now() + FillAnimation.duration) {
             if pulse?.regionID == regionID { pulse = nil }
         }
+    }
+
+    /// Prevents "Not that one" from firing 30 times per second during a drag.
+    private func throttleWrongColor() {
+        let now = Date()
+        guard now.timeIntervalSince(lastWrongTrigger) > 0.25 else { return }
+        lastWrongTrigger = now
+        onWrongColor()
     }
 }

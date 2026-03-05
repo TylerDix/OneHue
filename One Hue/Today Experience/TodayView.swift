@@ -1,35 +1,50 @@
 import SwiftUI
 
 struct TodayView: View {
-    @ObservedObject var store: DailyArtworkStore
+    @StateObject private var store = DailyArtworkStore()
 
     @State private var showSettings = false
     @State private var showCompletion = false
     @State private var wrongColorToast = false
 
+    // Separate opacity controls for the completion sequence:
+    // - Chrome (header, palette) fades to 0
+    // - Canvas dims but stays visible as backdrop
+    @State private var chromeOpacity: CGFloat = 1.0
+    @State private var canvasOpacity: CGFloat = 1.0
+
     var body: some View {
         ZStack {
+            // Main content
             VStack(spacing: 16) {
-                header
+                header.opacity(chromeOpacity)
 
                 CanvasView(store: store) {
                     showWrongColorToast()
                 }
                 .padding(.horizontal, 18)
+                .opacity(canvasOpacity)
+                // Disable interaction once complete
+                .allowsHitTesting(!store.isComplete)
 
-                palette
+                PaletteView(
+                    palette: store.artwork.palette,
+                    selectedIndex: $store.selectedColorIndex,
+                    filledIDs: store.filledRegionIDs,
+                    regions: store.artwork.regions,
+                    isComplete: store.isComplete
+                )
+                .opacity(chromeOpacity)
 
                 Spacer(minLength: 10)
             }
             .padding(.top, 14)
             .onChange(of: store.isComplete) { _, complete in
-                if complete {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        showCompletion = true
-                    }
-                }
+                if complete { beginCompletionSequence() }
+                else { resetCompletionSequence() }
             }
 
+            // "Not that one" toast
             if wrongColorToast && !showCompletion {
                 Text("Not that one")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -46,22 +61,21 @@ struct TodayView: View {
                     .frame(maxHeight: .infinity, alignment: .top)
             }
 
+            // Completion — floats over the dimmed artwork
             if showCompletion {
                 CompletionOverlayView(
                     message: store.artwork.completionMessage,
-                    globalCountText: mockGlobalCountText(),
-                    onDismiss: {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            showCompletion = false
-                        }
-                    }
+                    count: 12_847  // TODO: Replace with live Supabase counter
                 )
+                .transition(.opacity)
             }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
         }
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack {
@@ -89,29 +103,38 @@ struct TodayView: View {
         .padding(.horizontal, 18)
     }
 
-    private var palette: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(Array(store.artwork.palette.enumerated()), id: \.offset) { idx, c in
-                    Button {
-                        store.selectedColorIndex = idx
-                    } label: {
-                        Circle()
-                            .fill(c)
-                            .frame(width: 34, height: 34)
-                            .overlay(
-                                Circle().stroke(.white.opacity(store.selectedColorIndex == idx ? 0.9 : 0.2),
-                                               lineWidth: store.selectedColorIndex == idx ? 2 : 1)
-                            )
-                            .shadow(radius: store.selectedColorIndex == idx ? 8 : 0)
-                    }
-                    .buttonStyle(.plain)
-                }
+    // MARK: - Completion Sequence
+
+    private func beginCompletionSequence() {
+        guard !showCompletion else { return }
+
+        // Step 1: Fade out chrome (header, palette) — 400ms
+        withAnimation(.easeOut(duration: 0.4)) {
+            chromeOpacity = 0.0
+        }
+
+        // Step 2: Dim the artwork to a quiet backdrop — starts slightly after, 600ms
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.easeOut(duration: 0.6)) {
+                canvasOpacity = 0.35
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 6)
+        }
+
+        // Step 3: Bring in the completion overlay — after artwork has dimmed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.easeIn(duration: 0.5)) {
+                showCompletion = true
+            }
         }
     }
+
+    private func resetCompletionSequence() {
+        showCompletion = false
+        chromeOpacity = 1.0
+        canvasOpacity = 1.0
+    }
+
+    // MARK: - Wrong Color Toast
 
     private func showWrongColorToast() {
         guard !wrongColorToast else { return }
@@ -119,11 +142,5 @@ struct TodayView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
             withAnimation(.easeOut(duration: 0.2)) { wrongColorToast = false }
         }
-    }
-
-    private func mockGlobalCountText() -> String {
-        let base = 3200
-        let extra = store.artwork.id.hashValue.magnitude % 4200
-        return "\(base + Int(extra)) people completed today"
     }
 }

@@ -9,27 +9,31 @@ struct SettingsView: View {
             Form {
                 Section("One Hue") {
                     Text("Free. No ads. Ever.")
-                    Text("A daily calm coloring space.")
+                    Text("One image. One world. One day.")
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Daily") {
-                    LabeledContent("Day ID") {
+                Section("Today") {
+                    LabeledContent("Day") {
                         Text(store.artwork.id)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
 
-                    LabeledContent("Debug offset") {
-                        Text("\(store.debugDayOffset)")
+                    LabeledContent("Regions") {
+                        Text("\(store.artwork.regions.count)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    LabeledContent("Colors") {
+                        Text("\(store.artwork.palette.count)")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
                 }
 
                 Section("Debug") {
-                    // Use a VStack of full-width buttons: much more reliable than
-                    // multiple small buttons in one Form row.
                     VStack(spacing: 10) {
                         HStack(spacing: 10) {
                             debugButton("Prev Day") { store.debugPrevDay() }
@@ -57,15 +61,12 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Helpers
-
     @ViewBuilder
     private func debugButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .frame(maxWidth: .infinity)
         }
-        // These styles are the key to making taps reliable in Form.
         .buttonStyle(.bordered)
         .controlSize(.regular)
     }

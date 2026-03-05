@@ -6,6 +6,7 @@ struct FillPulse: Equatable {
 }
 
 enum FillAnimation {
+    /// Duration for the color fade when a region is filled.
+    /// Target from spec: 180–220ms. Using 200ms as a clean middle.
     static let duration: Double = 0.20
-    static let bloomScale: CGFloat = 1.035
 }
