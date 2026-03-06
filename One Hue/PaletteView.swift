@@ -83,8 +83,9 @@ struct PaletteView: View {
 
                 if isSelected {
                     Circle()
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 2.5)
-                        .frame(width: size + 8, height: size + 8)
+                        .strokeBorder(color, lineWidth: 3.5)
+                        .frame(width: size + 10, height: size + 10)
+                        .shadow(color: color.opacity(0.55), radius: 8)
                 }
 
                 if isDone {

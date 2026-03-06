@@ -41,6 +41,7 @@ struct CompletionOverlayView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.ultraThinMaterial)
         .onAppear { beginReveal() }
         .onChange(of: count) { _, newCount in
             if initialAnimationDone {

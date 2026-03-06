@@ -6,7 +6,6 @@ struct TodayView: View {
 
     @State private var showSettings    = false
     @State private var showCompletion  = false
-    @State private var wrongColorToast = false
     @State private var chromeOpacity: CGFloat = 1.0
 
     var body: some View {
@@ -22,7 +21,7 @@ struct TodayView: View {
                     .padding(.bottom, 12)
 
                 // Canvas — fills remaining space between header and palette
-                CanvasView(store: store) { showWrongColorToast() }
+                CanvasView(store: store)
                     .aspectRatio(store.artwork.aspectRatio, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -46,23 +45,6 @@ struct TodayView: View {
                     if phase == .complete { beginCompletionSequence() }
                     if phase == .pristine { resetCompletionSequence() }
                 }
-            }
-
-            // "Not that one" toast
-            if wrongColorToast && !showCompletion {
-                Text("Not that one")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(.black.opacity(0.6))
-                            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
-                    )
-                    .transition(.opacity)
-                    .padding(.top, 64)
-                    .frame(maxHeight: .infinity, alignment: .top)
             }
 
             // Completion overlay
@@ -140,15 +122,6 @@ struct TodayView: View {
         withAnimation(.easeIn(duration: 0.3)) { chromeOpacity = 1.0 }
     }
 
-    // MARK: - Wrong Color Toast
-
-    private func showWrongColorToast() {
-        guard !wrongColorToast else { return }
-        withAnimation(.easeOut(duration: 0.12)) { wrongColorToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-            withAnimation(.easeOut(duration: 0.2)) { wrongColorToast = false }
-        }
-    }
 }
 
 // MARK: - Previews

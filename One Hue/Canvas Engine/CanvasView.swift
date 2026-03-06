@@ -21,6 +21,9 @@ struct CanvasView: View {
     // Locked = finger is actively painting; unlocked = finger may pan
     @State private var isLocked: Bool = false
 
+    // Paint cursor (in canvas-local coordinates)
+    @State private var cursorLocal: CGPoint? = nil
+
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
 
@@ -44,7 +47,9 @@ struct CanvasView: View {
                 GridRenderer(
                     artwork: store.artwork,
                     filledCells: store.filledCells,
-                    cellSize: cs
+                    cellSize: cs,
+                    zoom: currentZoom,
+                    selectedColorIndex: store.selectedColorIndex
                 )
                 .frame(width: renderSize.width, height: renderSize.height)
                 .opacity(gridOpacity)
@@ -56,6 +61,14 @@ struct CanvasView: View {
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.7))
                         .transition(.opacity)
+                }
+
+                // ── Layer 4: Paint cursor (inside ZStack, canvas-local coords) ──
+                if store.phase == .painting, let local = cursorLocal {
+                    PaintCursor(color: store.artwork.palette[store.selectedColorIndex])
+                        .scaleEffect(1.0 / currentZoom)
+                        .position(local)
+                        .allowsHitTesting(false)
                 }
             }
             .frame(width: renderSize.width, height: renderSize.height)
@@ -101,11 +114,24 @@ struct CanvasView: View {
 
     // MARK: - Gestures
 
+    /// Convert a gesture point (geo-space) to canvas-local coordinates.
+    private func geoToLocal(_ point: CGPoint, geo: GeometryProxy, renderSize: CGSize) -> CGPoint {
+        let cx = geo.size.width  / 2
+        let cy = geo.size.height / 2
+        return CGPoint(
+            x: (point.x - cx - offset.width)  / currentZoom + renderSize.width  / 2,
+            y: (point.y - cy - offset.height) / currentZoom + renderSize.height / 2
+        )
+    }
+
     private func paintGesture(geo: GeometryProxy, renderSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 let loc = value.location
                 guard store.phase == .painting else { return }
+
+                // Track cursor in canvas-local coordinates
+                cursorLocal = geoToLocal(loc, geo: geo, renderSize: renderSize)
 
                 // ── While locked: paint freely, no pan ──
                 if isLocked {
@@ -151,6 +177,7 @@ struct CanvasView: View {
 
                 // Always unlock on finger lift — never leave canvas permanently locked
                 isLocked = false
+                withAnimation(.easeOut(duration: 0.2)) { cursorLocal = nil }
                 lastOffset = offset
                 clampOffset()
             }
@@ -169,10 +196,18 @@ struct CanvasView: View {
     private var zoomGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                currentZoom = min(max(lastZoom * value, minZoom), maxZoom)
+                let newZoom = min(max(lastZoom * value, minZoom), maxZoom)
+                // Scale offset so the viewport center stays on the same content point
+                let ratio = newZoom / lastZoom
+                offset = CGSize(
+                    width:  lastOffset.width  * ratio,
+                    height: lastOffset.height * ratio
+                )
+                currentZoom = newZoom
             }
             .onEnded { _ in
                 lastZoom = currentZoom
+                lastOffset = offset
                 clampOffset()
             }
     }
@@ -200,16 +235,10 @@ struct CanvasView: View {
         geo: GeometryProxy,
         renderSize: CGSize
     ) -> GridCell? {
-        let cx = geo.size.width  / 2
-        let cy = geo.size.height / 2
-        let dx = (point.x - cx - offset.width)  / currentZoom
-        let dy = (point.y - cy - offset.height) / currentZoom
-        let canvasX = dx + renderSize.width  / 2
-        let canvasY = dy + renderSize.height / 2
-
+        let local = geoToLocal(point, geo: geo, renderSize: renderSize)
         let cs = cellSize(renderSize: renderSize)
-        let col = Int(canvasX / cs.width)
-        let row = Int(canvasY / cs.height)
+        let col = Int(local.x / cs.width)
+        let row = Int(local.y / cs.height)
 
         guard col >= 0, col < store.artwork.cols,
               row >= 0, row < store.artwork.rows else { return nil }
@@ -267,47 +296,166 @@ struct GridCell: Equatable, Hashable {
     let row: Int
 }
 
+// MARK: - Paint Cursor
+
+private struct PaintCursor: View {
+    let color: Color
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            // Soft glow halo
+            Circle()
+                .fill(color.opacity(0.25))
+                .frame(width: 56, height: 56)
+                .blur(radius: 12)
+                .scaleEffect(pulse ? 1.2 : 1.0)
+
+            // Main ring — thick, colored
+            Circle()
+                .strokeBorder(color, lineWidth: 4)
+                .frame(width: 40, height: 40)
+                .shadow(color: color.opacity(0.6), radius: 10)
+                .shadow(color: color.opacity(0.3), radius: 4)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+        .transition(.scale(scale: 0.5).combined(with: .opacity))
+    }
+}
+
+// MARK: - Grid Renderer
+
 struct GridRenderer: View {
     let artwork: DailyArtwork
     let filledCells: [GridCell: Int]
     let cellSize: CGSize
+    let zoom: CGFloat
+    let selectedColorIndex: Int
 
     var body: some View {
-        Canvas { context, _ in
-            let cw = cellSize.width
-            let ch = cellSize.height
+        _GridRepresentable(
+            artwork: artwork,
+            filledCells: filledCells,
+            cellSize: cellSize,
+            zoom: zoom,
+            selectedColorIndex: selectedColorIndex
+        )
+    }
+}
 
-            for row in 0..<artwork.rows {
-                for col in 0..<artwork.cols {
-                    let colorIdx = artwork.colorIndex(col: col, row: row)
-                    if artwork.isNonInteractive(colorIdx) { continue }
+// MARK: - Core Graphics grid (UIViewRepresentable)
 
-                    let rect = CGRect(
-                        x: CGFloat(col) * cw, y: CGFloat(row) * ch,
-                        width: cw, height: ch
-                    )
-                    let cell = GridCell(col: col, row: row)
+private struct _GridRepresentable: UIViewRepresentable {
+    let artwork: DailyArtwork
+    let filledCells: [GridCell: Int]
+    let cellSize: CGSize
+    let zoom: CGFloat
+    let selectedColorIndex: Int
 
-                    if let filledIdx = filledCells[cell] {
-                        context.fill(Path(rect), with: .color(artwork.palette[filledIdx]))
+    func makeUIView(context: Context) -> _GridView {
+        let v = _GridView()
+        v.backgroundColor = .clear
+        v.isOpaque = false
+        v.contentMode = .redraw
+        return v
+    }
+
+    func updateUIView(_ v: _GridView, context: Context) {
+        v.artwork = artwork
+        v.filledCells = filledCells
+        v.cellSize = cellSize
+        v.selectedColorIndex = selectedColorIndex
+        // Render at higher resolution so zooming stays crisp (cap at 4× for memory)
+        let native = v.traitCollection.displayScale
+        v.contentScaleFactor = native * min(zoom, 4.0)
+        v.setNeedsDisplay()
+    }
+}
+
+private final class _GridView: UIView {
+    var artwork: DailyArtwork?
+    var filledCells: [GridCell: Int] = [:]
+    var cellSize: CGSize = .zero
+    var selectedColorIndex: Int = 0
+
+    override func draw(_ rect: CGRect) {
+        guard let artwork, let ctx = UIGraphicsGetCurrentContext() else { return }
+        let cw = cellSize.width
+        let ch = cellSize.height
+        let scale = contentScaleFactor
+
+        // Adaptive line width: thinner on small cells, thicker on large
+        let lw = max(1.0 / scale, min(cw * 0.02, 0.5))
+
+        // Hint tint for cells matching the selected color
+        let selectedColor = UIColor(artwork.palette[selectedColorIndex])
+        let hintColor = selectedColor.withAlphaComponent(0.12)
+
+        for row in 0..<artwork.rows {
+            for col in 0..<artwork.cols {
+                let colorIdx = artwork.colorIndex(col: col, row: row)
+                if artwork.isNonInteractive(colorIdx) { continue }
+
+                let cellRect = CGRect(
+                    x: CGFloat(col) * cw, y: CGFloat(row) * ch,
+                    width: cw, height: ch
+                )
+                let cell = GridCell(col: col, row: row)
+
+                if let filledIdx = filledCells[cell] {
+                    UIColor(artwork.palette[filledIdx]).setFill()
+                    ctx.fill(cellRect)
+                } else {
+                    // Fill: hint tint for matching cells, black for others
+                    if colorIdx == selectedColorIndex {
+                        hintColor.setFill()
                     } else {
-                        context.fill(Path(rect), with: .color(.black))
-                        context.stroke(Path(rect),
-                                       with: .color(.white.opacity(0.15)),
-                                       lineWidth: 0.5)
-                        if cw > 9 {
-                            var text = AttributedString("\(colorIdx + 1)")
-                            text.font = .system(size: min(cw * 0.42, 10),
-                                                weight: .medium, design: .rounded)
-                            text.foregroundColor = .white.opacity(0.55)
-                            context.draw(Text(text),
-                                         at: CGPoint(x: rect.midX, y: rect.midY),
-                                         anchor: .center)
-                        }
+                        UIColor.black.setFill()
+                    }
+                    ctx.fill(cellRect)
+
+                    // Crisp grid lines: anti-aliasing OFF → exact pixel edges
+                    ctx.saveGState()
+                    ctx.setShouldAntialias(false)
+                    UIColor.white.withAlphaComponent(0.2).setStroke()
+                    ctx.setLineWidth(lw)
+                    // Inset stroke so adjacent cells don't double-up borders
+                    ctx.stroke(cellRect.insetBy(dx: lw / 2, dy: lw / 2))
+                    ctx.restoreGState()
+
+                    // Number label — only when cells are large enough to read
+                    if cw > 8 {
+                        let text = "\(colorIdx + 1)" as NSString
+                        let fontSize = min(cw * 0.5, 11)
+                        let font = Self.roundedFont(size: fontSize, weight: .medium)
+                        let attrs: [NSAttributedString.Key: Any] = [
+                            .font: font,
+                            .foregroundColor: UIColor.white.withAlphaComponent(0.6)
+                        ]
+                        let sz = text.size(withAttributes: attrs)
+                        text.draw(
+                            at: CGPoint(
+                                x: cellRect.midX - sz.width / 2,
+                                y: cellRect.midY - sz.height / 2
+                            ),
+                            withAttributes: attrs
+                        )
                     }
                 }
             }
         }
+    }
+
+    private static func roundedFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let sys = UIFont.systemFont(ofSize: size, weight: weight)
+        if let desc = sys.fontDescriptor.withDesign(.rounded) {
+            return UIFont(descriptor: desc, size: size)
+        }
+        return sys
     }
 }
 
@@ -336,7 +484,6 @@ struct GridRenderer: View {
 // Thin wrapper to inject a pre-built store into a TodayView-like layout for previews
 private struct TodayView_WithStore: View {
     @ObservedObject var store: DailyArtworkStore
-    @State private var wrongColorToast = false
     @State private var showSettings = false
 
     var body: some View {
@@ -366,7 +513,7 @@ private struct TodayView_WithStore: View {
                 .padding(.top, 8)
                 .padding(.bottom, 12)
 
-                CanvasView(store: store) { wrongColorToast = true }
+                CanvasView(store: store)
                     .aspectRatio(store.artwork.aspectRatio, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
