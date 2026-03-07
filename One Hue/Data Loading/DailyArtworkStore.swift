@@ -82,8 +82,8 @@ final class ColoringStore: ObservableObject {
             toFill.formUnion(document.clusters[clusterIdx].elementIndices)
         }
 
-        // Also collect tiny neighbors near the tapped element
-        collectTinyNeighbors(from: elementIndex, groupIndex: groupIdx, into: &toFill)
+        // Also collect tiny neighbors near any element in the filled cluster
+        collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
 
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
@@ -93,15 +93,15 @@ final class ColoringStore: ObservableObject {
     // MARK: - Auto-Fill Tiny Neighbors
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny"
-    private let tinyThreshold: CGFloat = 30
+    private let tinyThreshold: CGFloat = 50
     /// How far (SVG units) to look for adjacent tiny elements
-    private let neighborMargin: CGFloat = 15
+    private let neighborMargin: CGFloat = 25
 
-    /// BFS cascade: starting from `elementIndex`, find all touching tiny same-group
+    /// BFS cascade: starting from all seed elements, find touching tiny same-group
     /// elements and add them to `toFill`.
-    private func collectTinyNeighbors(from elementIndex: Int, groupIndex: Int, into toFill: inout Set<Int>) {
+    private func collectTinyNeighbors(from seeds: Set<Int>, groupIndex: Int, into toFill: inout Set<Int>) {
         let group = document.groups[groupIndex]
-        var queue = [elementIndex]
+        var queue = Array(seeds)
 
         while !queue.isEmpty {
             let current = queue.removeFirst()

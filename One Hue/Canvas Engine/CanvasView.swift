@@ -76,19 +76,18 @@ struct CanvasView: View {
             .frame(width: renderSize.width, height: renderSize.height)
             .scaleEffect(currentZoom)
             .offset(offset)
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
             .contentShape(Rectangle())
-            .gesture(paintGesture(renderSize: renderSize))
+            .gesture(paintGesture(viewportSize: geo.size, renderSize: renderSize))
             .simultaneousGesture(zoomGesture)
             .simultaneousGesture(panGesture)
-            .position(x: geo.size.width / 2, y: geo.size.height / 2)
             .overlay {
                 if let pos = cursorPosition, isLocked {
-                    let originX = (geo.size.width - renderSize.width) / 2
-                    let originY = (geo.size.height - renderSize.height) / 2
                     Circle()
                         .stroke(.white.opacity(0.7), lineWidth: 1.5)
                         .frame(width: cursorSize, height: cursorSize)
-                        .position(x: originX + pos.x, y: originY + pos.y)
+                        .position(x: pos.x, y: pos.y)
                         .allowsHitTesting(false)
                 }
             }
@@ -108,13 +107,13 @@ struct CanvasView: View {
             guard !added.isEmpty else { return }
             let now = Date()
             for idx in added { flashElements[idx] = now }
-            // Drive ~30fps re-renders for the flash fade-out
-            for frame in 1...12 {
+            // Drive ~30fps re-renders for the fill glow
+            for frame in 1...18 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Double(frame) / 30.0) {
                     flashTick &+= 1
                 }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                 for idx in added { flashElements.removeValue(forKey: idx) }
             }
         }
@@ -147,7 +146,7 @@ struct CanvasView: View {
 
     // MARK: - Paint Gesture
 
-    private func paintGesture(renderSize: CGSize) -> some Gesture {
+    private func paintGesture(viewportSize: CGSize, renderSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 let loc = value.location
@@ -157,14 +156,14 @@ struct CanvasView: View {
 
                 // While locked: paint freely
                 if isLocked {
-                    if let elementIdx = screenToElement(loc, renderSize: renderSize) {
+                    if let elementIdx = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
                         store.tryFill(elementIndex: elementIdx)
                     }
                     return
                 }
 
                 // First touch: decide paint or pan
-                guard let elementIdx = screenToElement(loc, renderSize: renderSize) else {
+                guard let elementIdx = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) else {
                     panIfNeeded(value: value)
                     return
                 }
@@ -198,12 +197,13 @@ struct CanvasView: View {
 
     // MARK: - Hit Testing
 
-    private func screenToElement(_ point: CGPoint, renderSize: CGSize) -> Int? {
-        // Transform screen point → SVG coordinate space
-        let cx = renderSize.width / 2
-        let cy = renderSize.height / 2
-        let dx = (point.x - cx - offset.width) / currentZoom
-        let dy = (point.y - cy - offset.height) / currentZoom
+    private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> Int? {
+        // Transform screen point (in viewport space) → SVG coordinate space
+        // Content is centered in the viewport
+        let vcx = viewportSize.width / 2
+        let vcy = viewportSize.height / 2
+        let dx = (point.x - vcx - offset.width) / currentZoom
+        let dy = (point.y - vcy - offset.height) / currentZoom
         let canvasX = dx + renderSize.width / 2
         let canvasY = dy + renderSize.height / 2
 
@@ -317,10 +317,8 @@ struct SVGCanvasRenderer: View {
     let flashElements: [Int: Date]
     let flashTick: UInt  // drives re-renders during flash animation
 
-    /// Minimum on-screen points a label must be to appear
-    private let minScreenPt: CGFloat = 9
-    /// How long the white flash lasts (seconds)
-    private static let flashDuration: TimeInterval = 0.35
+    /// How long the fill glow lasts (seconds)
+    private static let fillDuration: TimeInterval = 0.6
 
     // MARK: - Checkerboard Tile
 
@@ -370,12 +368,12 @@ struct SVGCanvasRenderer: View {
                 if isFilled {
                     ctx.fill(path, with: .color(group.color))
 
-                    // Animated flash overlay (fades white → transparent)
+                    // Brief brightness pulse that fades out
                     if let fillTime = flashElements[element.id] {
                         let elapsed = now.timeIntervalSince(fillTime)
-                        if elapsed < Self.flashDuration {
-                            let t = elapsed / Self.flashDuration
-                            let alpha = (1.0 - t * t) * 0.55  // ease-out curve
+                        if elapsed < Self.fillDuration {
+                            let t = elapsed / Self.fillDuration
+                            let alpha = (1.0 - t) * (1.0 - t) * 0.4
                             ctx.fill(path, with: .color(.white.opacity(alpha)))
                         }
                     }
