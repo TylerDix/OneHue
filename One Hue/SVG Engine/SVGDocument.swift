@@ -101,6 +101,9 @@ struct SpatialHash {
             let minRow = max(0, Int((b.minY - origin.y) / cellSize))
             let maxRow = min(rows - 1, Int((b.maxY - origin.y) / cellSize))
 
+            // Skip elements with degenerate or out-of-bounds bounding boxes
+            guard minCol <= maxCol, minRow <= maxRow else { continue }
+
             for r in minRow...maxRow {
                 for c in minCol...maxCol {
                     buckets[r * cols + c].append(element.id)
