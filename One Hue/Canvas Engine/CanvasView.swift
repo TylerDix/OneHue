@@ -20,8 +20,7 @@ struct CanvasView: View {
     @State private var cursorPosition: CGPoint? = nil
 
     // Phase animation
-    @State private var showNumbers: Bool = false
-    @State private var showHint: Bool = true
+    @State private var showNumbers: Bool = true
 
     // Fill flash animation
     @State private var flashElements: [Int: Date] = [:]
@@ -54,24 +53,6 @@ struct CanvasView: View {
                 )
                 .frame(width: renderSize.width, height: renderSize.height)
 
-                // Tap to begin hint
-                if showHint {
-                    Text("Tap to begin")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                                .environment(\.colorScheme, .dark)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
-                        )
-                        .transition(.opacity)
-                }
             }
             .frame(width: renderSize.width, height: renderSize.height)
             .scaleEffect(currentZoom)
@@ -124,16 +105,7 @@ struct CanvasView: View {
 
     private func animate(to phase: ArtworkPhase) {
         switch phase {
-        case .pristine:
-            withAnimation(.easeInOut(duration: 0.5)) {
-                showNumbers = false
-                showHint = true
-            }
-            resetZoom()
-            isLocked = false
-
         case .painting:
-            withAnimation(.easeOut(duration: 0.2)) { showHint = false }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
                 showNumbers = true
             }
@@ -180,13 +152,7 @@ struct CanvasView: View {
                     if dist > 6 { panIfNeeded(value: value) }
                 }
             }
-            .onEnded { value in
-                if store.phase == .pristine {
-                    if hypot(value.translation.width, value.translation.height) < 10 {
-                        store.beginPainting()
-                    }
-                    return
-                }
+            .onEnded { _ in
                 guard store.phase == .painting else { return }
                 isLocked = false
                 cursorPosition = nil
@@ -461,7 +427,7 @@ struct SVGCanvasRenderer: View {
 // MARK: - Previews
 
 #if DEBUG
-#Preview("Pristine") {
+#Preview("Canvas") {
     TodayView()
         .preferredColorScheme(.dark)
 }

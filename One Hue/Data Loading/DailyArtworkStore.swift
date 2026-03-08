@@ -7,7 +7,7 @@ final class ColoringStore: ObservableObject {
     // MARK: - Published State
 
     @Published private(set) var document: SVGDocument
-    @Published private(set) var phase: ArtworkPhase = .pristine
+    @Published private(set) var phase: ArtworkPhase = .painting
     @Published var selectedGroupIndex: Int = 0
 
     @Published private(set) var filledElements: Set<Int> = [] {
@@ -43,25 +43,15 @@ final class ColoringStore: ObservableObject {
     // MARK: - Init
 
     init() {
-        let doc = SVGParser.parse(svgName: "house1")
+        let doc = SVGParser.parse(svgName: "GoldenFirefly")
               ?? SVGDocument.empty(id: "fallback")
         self.document = doc
         self.spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         self.filledElements = Self.loadProgress(for: doc.id)
 
-        if !filledElements.isEmpty && filledElements.count < doc.totalElements {
-            phase = .painting
-        }
         if filledElements.count >= doc.totalElements && doc.totalElements > 0 {
             phase = .complete
         }
-    }
-
-    // MARK: - Phase Actions
-
-    func beginPainting() {
-        guard phase == .pristine else { return }
-        phase = .painting
     }
 
     // MARK: - Fill
@@ -93,9 +83,9 @@ final class ColoringStore: ObservableObject {
     // MARK: - Auto-Fill Tiny Neighbors
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny"
-    private let tinyThreshold: CGFloat = 50
+    private let tinyThreshold: CGFloat = 90
     /// How far (SVG units) to look for adjacent tiny elements
-    private let neighborMargin: CGFloat = 25
+    private let neighborMargin: CGFloat = 45
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group
     /// elements and add them to `toFill`.
@@ -120,7 +110,7 @@ final class ColoringStore: ObservableObject {
 
     func resetProgress() {
         filledElements = []
-        phase = .pristine
+        phase = .painting
         Self.clearProgress(for: document.id)
     }
 

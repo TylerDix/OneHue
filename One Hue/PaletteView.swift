@@ -127,7 +127,6 @@ struct PaletteView: View {
 #if DEBUG
 #Preview("Palette") {
     let store = ColoringStore()
-    store.beginPainting()
     return PaletteView(
         groups: store.document.groups,
         selectedIndex: .constant(0),

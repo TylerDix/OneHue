@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The three states a daily artwork moves through.
+/// The two states a daily artwork moves through.
+/// The source image is never shown until the user completes the painting.
 enum ArtworkPhase: Equatable {
-    case pristine    // Muted SVG visible, "tap to begin"
-    case painting    // Elements fillable, palette visible
-    case complete    // Fully colored artwork revealed
+    case painting    // Grid visible, cells fillable, palette shown
+    case complete    // Grid dissolves, original image revealed with completion message
 }

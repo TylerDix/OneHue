@@ -41,7 +41,7 @@ struct TodayView: View {
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
                     if phase == .complete { beginCompletionSequence() }
-                    if phase == .pristine { resetCompletionSequence() }
+                    if phase == .painting { resetCompletionSequence() }
                 }
             }
 

@@ -239,7 +239,7 @@ final class SVGParser: NSObject, XMLParserDelegate {
         var clusters: [ElementCluster] = []
         var elementClusterMap: [Int: Int] = [:]
         var nextId = 0
-        let margin: CGFloat = 3.0
+        let margin: CGFloat = 12.0
 
         for group in groups {
             let indices = group.elementIndices
