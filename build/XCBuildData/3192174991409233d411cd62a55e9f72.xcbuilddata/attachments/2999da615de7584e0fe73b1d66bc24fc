@@ -1,0 +1,76 @@
+{
+  "" : {
+    "const-values" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary.swiftconstvalues",
+    "dependencies" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary.d",
+    "diagnostics" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary.dia",
+    "emit-module-dependencies" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary-emit-module.dia",
+    "pch" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/One Hue-primary.swiftdeps"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/App + Root/AppRootView.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/AppRootView.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/AppRootView.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/AppRootView.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/App + Root/OneHueApp.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/OneHueApp.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/OneHueApp.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/OneHueApp.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/Canvas Engine/CanvasView.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/CanvasView.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/CanvasView.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/CanvasView.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/Daily Artwork/DailyArtwork.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/DailyArtwork.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/DailyArtwork.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/DailyArtwork.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/Data Loading/DailyArtworkStore.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/DailyArtworkStore.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/DailyArtworkStore.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/DailyArtworkStore.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/Data Loading/SettingsView.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SettingsView.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/PaletteView.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/PaletteView.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/PaletteView.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/PaletteView.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/SVG Engine/SVGDocument.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGDocument.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGDocument.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGDocument.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/SVG Engine/SVGParser.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGParser.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGParser.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGParser.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/SVG Engine/SVGPathParser.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGPathParser.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGPathParser.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/SVGPathParser.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/Today Experience/CompletionOverlayView.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/CompletionOverlayView.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/CompletionOverlayView.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/CompletionOverlayView.o"
+  },
+  "/Users/tyler/Documents/One Hue/One Hue/Today Experience/TodayView.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/TodayView.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/TodayView.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/TodayView.o"
+  },
+  "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

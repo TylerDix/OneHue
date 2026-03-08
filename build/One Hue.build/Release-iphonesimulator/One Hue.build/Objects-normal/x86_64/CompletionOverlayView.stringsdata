@@ -1,0 +1,16 @@
+{
+  "source": "/Users/tyler/Documents/One Hue/One Hue/Today Experience/CompletionOverlayView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "See you tomorrow.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 38
+        }
+      }
+    ]
+  },
+  "version": 1
+}

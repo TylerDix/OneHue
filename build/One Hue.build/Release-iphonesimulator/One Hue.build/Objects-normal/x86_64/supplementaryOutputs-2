@@ -1,0 +1,12 @@
+{
+  "/Users/tyler/Documents/One Hue/One Hue/App + Root/AppRootView.swift" : {
+    "abi-baseline-json" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One_Hue.abi.json",
+    "const-values" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One Hue-primary.swiftconstvalues",
+    "dependencies" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One Hue-primary.d",
+    "diagnostics" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One Hue-primary.dia",
+    "objc-header" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One_Hue-Swift.h",
+    "swiftdoc" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One_Hue.swiftdoc",
+    "swiftmodule" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One_Hue.swiftmodule",
+    "swiftsourceinfo" : "/Users/tyler/Documents/One Hue/build/One Hue.build/Release-iphonesimulator/One Hue.build/Objects-normal/x86_64/One_Hue.swiftsourceinfo"
+  }
+}
