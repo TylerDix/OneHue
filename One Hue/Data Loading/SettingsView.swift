@@ -72,6 +72,30 @@ struct SettingsView: View {
                 if showDebug {
                     Section("Debug") {
                         VStack(spacing: 10) {
+                            HStack(spacing: 12) {
+                                Button {
+                                    store.previousArtwork()
+                                } label: {
+                                    Image(systemName: "chevron.left")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+
+                                Text(store.document.id)
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity)
+
+                                Button {
+                                    store.nextArtwork()
+                                } label: {
+                                    Image(systemName: "chevron.right")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+
                             Button(role: .destructive) {
                                 store.resetProgress()
                             } label: {
@@ -89,10 +113,6 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.bordered)
 
-                            LabeledContent("SVG") {
-                                Text(store.document.id)
-                                    .foregroundStyle(.secondary)
-                            }
                             LabeledContent("Elements") {
                                 Text("\(store.document.totalElements)")
                                     .foregroundStyle(.secondary)

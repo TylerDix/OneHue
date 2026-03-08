@@ -40,10 +40,16 @@ final class ColoringStore: ObservableObject {
         document.groups[selectedGroupIndex]
     }
 
+    // MARK: - Available Artworks
+
+    static let artworkNames = ["GoldenFirefly", "KoiPond", "house1"]
+
+    private(set) var currentArtworkIndex: Int = 0
+
     // MARK: - Init
 
     init() {
-        let doc = SVGParser.parse(svgName: "GoldenFirefly")
+        let doc = SVGParser.parse(svgName: Self.artworkNames[0])
               ?? SVGDocument.empty(id: "fallback")
         self.document = doc
         self.spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
@@ -52,6 +58,29 @@ final class ColoringStore: ObservableObject {
         if filledElements.count >= doc.totalElements && doc.totalElements > 0 {
             phase = .complete
         }
+    }
+
+    // MARK: - Artwork Switching
+
+    func loadArtwork(at index: Int) {
+        let names = Self.artworkNames
+        guard index >= 0, index < names.count else { return }
+        let doc = SVGParser.parse(svgName: names[index])
+              ?? SVGDocument.empty(id: "fallback")
+        currentArtworkIndex = index
+        document = doc
+        spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
+        selectedGroupIndex = 0
+        filledElements = Self.loadProgress(for: doc.id)
+        phase = (filledElements.count >= doc.totalElements && doc.totalElements > 0) ? .complete : .painting
+    }
+
+    func nextArtwork() {
+        loadArtwork(at: (currentArtworkIndex + 1) % Self.artworkNames.count)
+    }
+
+    func previousArtwork() {
+        loadArtwork(at: (currentArtworkIndex - 1 + Self.artworkNames.count) % Self.artworkNames.count)
     }
 
     // MARK: - Fill
