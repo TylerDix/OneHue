@@ -7,8 +7,6 @@ struct SettingsView: View {
 
     @AppStorage("onehue.dailyReminder") private var dailyReminderEnabled = false
     @State private var showAbout = false
-    @State private var debugTapCount = 0
-    @State private var showDebug = false
 
     var body: some View {
         NavigationStack {
@@ -34,7 +32,7 @@ struct SettingsView: View {
                     }
                 }
 
-                // 2. About
+                // 3. About
                 Section {
                     NavigationLink {
                         AboutView()
@@ -48,7 +46,7 @@ struct SettingsView: View {
                     }
                 }
 
-                // 3. Tagline
+                // 4. Tagline
                 Section {
                     VStack(spacing: 6) {
                         Text("One Hue")
@@ -61,81 +59,81 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
-                    .onTapGesture {
-                        debugTapCount += 1
-                        if debugTapCount >= 5 { showDebug = true; debugTapCount = 0 }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { debugTapCount = 0 }
-                    }
                 }
 
-                // Debug (hidden until 5-tap)
-                if showDebug {
-                    Section("Debug") {
-                        VStack(spacing: 10) {
-                            HStack(spacing: 12) {
-                                Button {
-                                    store.previousArtwork()
-                                } label: {
-                                    Image(systemName: "chevron.left")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
+                // 5. Debug
+                Section("Debug") {
+                    VStack(spacing: 10) {
+                        // Artwork switcher (debug only — production uses daily rotation)
+                        HStack(spacing: 12) {
+                            Button { store.previousArtwork() } label: {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .frame(width: 36, height: 36)
+                                    .background(Circle().fill(.white.opacity(0.08)))
+                            }
+                            .buttonStyle(.plain)
 
-                                Text(store.document.id)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity)
+                            Text(store.document.title)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity)
 
-                                Button {
-                                    store.nextArtwork()
-                                } label: {
-                                    Image(systemName: "chevron.right")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
+                            Button { store.nextArtwork() } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .frame(width: 36, height: 36)
+                                    .background(Circle().fill(.white.opacity(0.08)))
                             }
-
-                            Button(role: .destructive) {
-                                store.resetProgress()
-                            } label: {
-                                Text("Reset Progress")
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button {
-                                store.debugForceComplete()
-                                dismiss()
-                            } label: {
-                                Text("Force Complete")
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                            }
-                            .buttonStyle(.bordered)
-
-                            LabeledContent("Elements") {
-                                Text("\(store.document.totalElements)")
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            LabeledContent("Groups") {
-                                Text("\(store.document.groups.count)")
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            LabeledContent("ViewBox") {
-                                let vb = store.document.viewBox
-                                Text("\(Int(vb.width))×\(Int(vb.height))")
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            LabeledContent("Phase") {
-                                Text(String(describing: store.phase))
-                                    .foregroundStyle(.secondary)
-                            }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 4)
+
+                        Toggle(isOn: $store.autoCompleteEnabled) {
+                            Text("Auto Complete")
+                        }
+
+                        Button(role: .destructive) {
+                            store.resetProgress()
+                        } label: {
+                            Text("Reset Progress")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
+                            store.debugForceComplete()
+                            dismiss()
+                        } label: {
+                            Text("Force Complete")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        .buttonStyle(.bordered)
+
+                        LabeledContent("Elements") {
+                            Text("\(store.document.totalElements)")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        LabeledContent("Groups") {
+                            Text("\(store.document.groups.count)")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        LabeledContent("ViewBox") {
+                            let vb = store.document.viewBox
+                            Text("\(Int(vb.width))×\(Int(vb.height))")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        LabeledContent("Phase") {
+                            Text(String(describing: store.phase))
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
             }
             .navigationTitle("Settings")
@@ -165,7 +163,7 @@ struct SettingsView: View {
 
         let content = UNMutableNotificationContent()
         content.title = "One Hue"
-        content.body  = "Today's image is waiting."
+        content.body  = "A moment of color awaits."
         content.sound = .default
 
         var dc = DateComponents()
@@ -195,14 +193,14 @@ struct AboutView: View {
                     Text("One Hue")
                         .font(.system(size: 32, weight: .light, design: .serif))
                         .foregroundStyle(.white.opacity(0.9))
-                    Text("One image. One world. One day.")
+                    Text("One image. One palette. One moment.")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
                 VStack(spacing: 16) {
-                    aboutParagraph("Every day, one image appears — the same image for every person on Earth. You color it in. When you finish, you see how many others did too. Then the app goes quiet until tomorrow.")
-                    aboutParagraph("There are no streaks, no leaderboards, no points. No ads, no accounts, no profiles. Nothing to optimize. Just a single daily act of focus and beauty, shared with the world.")
+                    aboutParagraph("Each day, a new image appears. Bring it to life one color at a time. No clock, no score — just you and the colors.")
+                    aboutParagraph("There are no streaks, no leaderboards, no points. No ads, no accounts, no profiles. Nothing to optimize. Just a single act of focus and beauty.")
                     aboutParagraph("The intent is simple: one moment of sustained attention in a world that takes it from you constantly.")
                 }
                 .padding(.horizontal, 28)

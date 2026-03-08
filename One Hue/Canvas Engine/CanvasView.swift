@@ -83,6 +83,10 @@ struct CanvasView: View {
         }
         .clipped()
         .onChange(of: store.phase) { _, phase in animate(to: phase) }
+        .onChange(of: store.findTargetToken) { _, token in
+            guard token > 0 else { return }
+            zoomToRect(store.findTargetBounds)
+        }
         .onChange(of: store.filledElements) { oldValue, newValue in
             let added = newValue.subtracting(oldValue)
             guard !added.isEmpty else { return }
@@ -270,6 +274,50 @@ struct CanvasView: View {
             offset = .zero; lastOffset = .zero
         }
     }
+
+    // MARK: - Find / Zoom-to-Target
+
+    /// Smoothly zooms and pans to center the given SVG-space rect in the viewport.
+    private func zoomToRect(_ svgRect: CGRect) {
+        let renderSize = currentRenderSize
+        guard viewportSize.width > 0, viewportSize.height > 0,
+              renderSize.width > 0, renderSize.height > 0 else { return }
+
+        let vb = store.document.viewBox
+        let scale = min(renderSize.width / vb.width, renderSize.height / vb.height)
+        let svgOffsetX = (renderSize.width - vb.width * scale) / 2
+        let svgOffsetY = (renderSize.height - vb.height * scale) / 2
+
+        // Pad the target rect so the cluster isn't jammed to the edge
+        let padded = svgRect.insetBy(dx: -svgRect.width * 0.8, dy: -svgRect.height * 0.8)
+
+        // Zoom level that fits the padded rect in the viewport
+        let clusterW = max(padded.width * scale, 1)
+        let clusterH = max(padded.height * scale, 1)
+        let fitZoom = min(viewportSize.width / clusterW, viewportSize.height / clusterH)
+        let targetZoom = min(max(fitZoom, 3.0), maxZoom)
+
+        // Offset to center the cluster
+        let canvasX = svgRect.midX * scale + svgOffsetX
+        let canvasY = svgRect.midY * scale + svgOffsetY
+        let dx = canvasX - renderSize.width / 2
+        let dy = canvasY - renderSize.height / 2
+
+        // Clamp so the offset can't scroll past canvas edges into black
+        let maxX = max(0, (renderSize.width * targetZoom - viewportSize.width) / 2)
+        let maxY = max(0, (renderSize.height * targetZoom - viewportSize.height) / 2)
+        let newOffset = CGSize(
+            width:  min(max(-dx * targetZoom, -maxX), maxX),
+            height: min(max(-dy * targetZoom, -maxY), maxY)
+        )
+
+        withAnimation(.easeInOut(duration: 0.45)) {
+            currentZoom = targetZoom
+            lastZoom = targetZoom
+            offset = newOffset
+            lastOffset = newOffset
+        }
+    }
 }
 
 // MARK: - SVG Canvas Renderer
@@ -300,7 +348,7 @@ struct SVGCanvasRenderer: View {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )!
         ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.09))
+        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.15))
         ctx.fill(CGRect(x: 0, y: 0, width: cell, height: cell))
         ctx.fill(CGRect(x: cell, y: cell, width: cell, height: cell))
         return Image(decorative: ctx.makeImage()!, scale: 1)
@@ -379,9 +427,17 @@ struct SVGCanvasRenderer: View {
                 let minVisible: CGFloat = 5
                 let fullVisible: CGFloat = 14
 
+                // Non-selected labels fade out between 2× and 3.5× zoom
+                let fadeStart: CGFloat = 2.0
+                let fadeEnd: CGFloat = 3.5
+                let otherGroupFade = 1.0 - min(max((zoomLevel - fadeStart) / (fadeEnd - fadeStart), 0), 1)
+
                 for cluster in document.clusters {
                     let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                     guard hasUnfilled else { continue }
+
+                    let isSelected = cluster.groupIndex == selectedGroupIndex
+                    guard isSelected || otherGroupFade > 0.01 else { continue }
 
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
                     let fontSize = max(min(dim * 0.35, 60), 4)
@@ -389,10 +445,9 @@ struct SVGCanvasRenderer: View {
                     guard screenPt >= minVisible else { continue }
 
                     let sizeAlpha = min((screenPt - minVisible) / (fullVisible - minVisible), 1.0)
-                    let group = document.groups[cluster.groupIndex]
-                    let isSelected = cluster.groupIndex == selectedGroupIndex
-                    let baseAlpha: Double = isSelected ? 0.9 : 0.45
+                    let baseAlpha: Double = isSelected ? 0.9 : 0.45 * otherGroupFade
 
+                    let group = document.groups[cluster.groupIndex]
                     var text = AttributedString("\(group.id + 1)")
                     text.font = .system(size: fontSize, weight: .semibold, design: .rounded)
                     text.foregroundColor = .white.opacity(baseAlpha * sizeAlpha)

@@ -7,6 +7,15 @@ final class SVGParser: NSObject, XMLParserDelegate {
 
     // MARK: - Public API
 
+    static func parse(artwork: Artwork) -> SVGDocument? {
+        guard let url = Bundle.main.url(forResource: artwork.fileName, withExtension: "svg"),
+              let data = try? Data(contentsOf: url) else {
+            print("[SVGParser] Could not find \(artwork.fileName).svg in bundle")
+            return nil
+        }
+        return parse(data: data, id: artwork.id, title: artwork.displayName, completionMessage: artwork.completionMessage)
+    }
+
     static func parse(svgName: String) -> SVGDocument? {
         guard let url = Bundle.main.url(forResource: svgName, withExtension: "svg"),
               let data = try? Data(contentsOf: url) else {
@@ -16,8 +25,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
         return parse(data: data, id: svgName)
     }
 
-    static func parse(data: Data, id: String) -> SVGDocument? {
-        let parser = SVGParser(id: id)
+    static func parse(data: Data, id: String, title: String? = nil, completionMessage: String? = nil) -> SVGDocument? {
+        let parser = SVGParser(id: id, title: title, completionMessage: completionMessage)
         let xmlParser = XMLParser(data: data)
         xmlParser.delegate = parser
         guard xmlParser.parse() else {
@@ -30,6 +39,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
     // MARK: - Internal State
 
     private let documentID: String
+    private let overrideTitle: String?
+    private let overrideCompletionMessage: String?
     private var viewBox = CGRect(x: 0, y: 0, width: 1792, height: 2400)
     private var styleColors: [String: String] = [:]  // className → hex
     private var parsedElements: [(className: String, path: CGPath)] = []
@@ -40,8 +51,10 @@ final class SVGParser: NSObject, XMLParserDelegate {
     private var insideDefs = false
     private var inlineStyleCounter = 0
 
-    private init(id: String) {
+    private init(id: String, title: String? = nil, completionMessage: String? = nil) {
         self.documentID = id
+        self.overrideTitle = title
+        self.overrideCompletionMessage = completionMessage
         super.init()
     }
 
@@ -209,11 +222,13 @@ final class SVGParser: NSObject, XMLParserDelegate {
             elements: elements, groups: groups
         )
 
-        // Title from filename
-        let title = documentID
+        // Title: use override if provided, otherwise derive from filename
+        let title = overrideTitle ?? documentID
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
             .capitalized
+
+        let message = overrideCompletionMessage ?? "Every shape found its color."
 
         return SVGDocument(
             id: documentID,
@@ -221,7 +236,7 @@ final class SVGParser: NSObject, XMLParserDelegate {
             viewBox: viewBox,
             elements: elements,
             groups: groups,
-            completionMessage: "Every shape found its color.",
+            completionMessage: message,
             elementGroupMap: elementGroupMap,
             clusters: clusters,
             elementClusterMap: elementClusterMap

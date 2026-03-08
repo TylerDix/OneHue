@@ -6,7 +6,6 @@ struct TodayView: View {
 
     @State private var showSettings   = false
     @State private var showCompletion = false
-    @State private var chromeOpacity: CGFloat = 1.0
 
     var body: some View {
         ZStack {
@@ -14,15 +13,28 @@ struct TodayView: View {
 
             VStack(spacing: 0) {
 
-                // Header
+                // Header — always visible so settings is accessible
                 header
-                    .opacity(chromeOpacity)
                     .padding(.top, 8)
                     .padding(.bottom, 12)
 
                 // Canvas
                 CanvasView(store: store)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottomTrailing) {
+                        if store.phase == .painting && hasUnfilledInSelectedGroup {
+                            Button { store.findNextUnfilled() } label: {
+                                Image(systemName: "scope")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .padding(10)
+                                    .background(Circle().fill(.white.opacity(0.08)))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(16)
+                            .transition(.opacity)
+                        }
+                    }
 
                 // Palette — only during painting
                 if store.phase == .painting {
@@ -32,7 +44,6 @@ struct TodayView: View {
                         filledElements: store.filledElements,
                         isComplete: store.isComplete
                     )
-                    .opacity(chromeOpacity)
                     .padding(.top, 8)
                     .padding(.bottom, 12)
                     .transition(.opacity)
@@ -45,20 +56,23 @@ struct TodayView: View {
                 }
             }
 
-            // Completion overlay
+            // Completion overlay — the app's resting state until midnight
             if showCompletion {
                 CompletionOverlayView(
                     message: store.document.completionMessage,
-                    onDismiss: {
-                        store.resetProgress()
-                        resetCompletionSequence()
-                    }
+                    completionService: CompletionService.shared
                 )
                 .transition(.opacity)
             }
         }
+        .onAppear {
+            if store.phase == .complete {
+                showCompletion = true
+            }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
+                .presentationDetents([.large])
         }
     }
 
@@ -66,9 +80,18 @@ struct TodayView: View {
 
     private var header: some View {
         HStack {
-            Text(store.document.title)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.9))
+            HStack(spacing: 6) {
+                Text(store.document.title)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+
+                if store.phase == .complete {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .transition(.opacity)
+                }
+            }
 
             Spacer()
 
@@ -91,11 +114,17 @@ struct TodayView: View {
         .padding(.horizontal, 18)
     }
 
+    // MARK: - Helpers
+
+    private var hasUnfilledInSelectedGroup: Bool {
+        let group = store.document.groups[store.selectedGroupIndex]
+        return group.elementIndices.contains(where: { !store.filledElements.contains($0) })
+    }
+
     // MARK: - Completion Sequence
 
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
-        withAnimation(.easeOut(duration: 0.5)) { chromeOpacity = 0.0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             withAnimation(.easeIn(duration: 0.6)) { showCompletion = true }
         }
@@ -103,7 +132,6 @@ struct TodayView: View {
 
     private func resetCompletionSequence() {
         showCompletion = false
-        withAnimation(.easeIn(duration: 0.3)) { chromeOpacity = 1.0 }
     }
 }
 

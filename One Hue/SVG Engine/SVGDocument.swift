@@ -40,7 +40,7 @@ struct ElementCluster: Identifiable {
 
 /// Fully parsed SVG ready for rendering and interaction.
 struct SVGDocument: Identifiable {
-    let id: String                    // filename stem, e.g. "house1"
+    let id: String                    // filename stem, e.g. "Home"
     let title: String
     let viewBox: CGRect
     let elements: [SVGElement]
