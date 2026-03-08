@@ -38,6 +38,7 @@ final class SVGParser: NSObject, XMLParserDelegate {
     private var insideStyle = false
     private var styleText = ""
     private var insideDefs = false
+    private var inlineStyleCounter = 0
 
     private init(id: String) {
         self.documentID = id
@@ -66,41 +67,51 @@ final class SVGParser: NSObject, XMLParserDelegate {
             }
 
         case "path":
-            guard let cls = attributes["class"],
+            guard let cls = resolveClassName(from: attributes),
                   let d = attributes["d"] else { break }
             let cgPath = SVGPathParser.parse(d)
-            parsedElements.append((className: cls, path: cgPath))
+            let finalPath = applyTransform(attributes, to: cgPath)
+            parsedElements.append((className: cls, path: finalPath))
 
         case "circle":
-            guard let cls = attributes["class"],
+            guard let cls = resolveClassName(from: attributes),
                   let cxStr = attributes["cx"], let cx = Double(cxStr),
                   let cyStr = attributes["cy"], let cy = Double(cyStr),
                   let rStr = attributes["r"], let r = Double(rStr) else { break }
             let rect = CGRect(x: cx - r, y: cy - r, width: 2 * r, height: 2 * r)
             let cgPath = CGPath(ellipseIn: rect, transform: nil)
-            parsedElements.append((className: cls, path: cgPath))
+            let finalPath = applyTransform(attributes, to: cgPath)
+            parsedElements.append((className: cls, path: finalPath))
+
+        case "ellipse":
+            guard let cls = resolveClassName(from: attributes) else { break }
+            let cx = Double(attributes["cx"] ?? "0") ?? 0
+            let cy = Double(attributes["cy"] ?? "0") ?? 0
+            guard let rxStr = attributes["rx"], let rx = Double(rxStr), rx > 0,
+                  let ryStr = attributes["ry"], let ry = Double(ryStr), ry > 0 else { break }
+            let rect = CGRect(x: cx - rx, y: cy - ry, width: rx * 2, height: ry * 2)
+            let cgPath = CGPath(ellipseIn: rect, transform: nil)
+            let finalPath = applyTransform(attributes, to: cgPath)
+            parsedElements.append((className: cls, path: finalPath))
 
         case "polygon":
-            guard let cls = attributes["class"],
+            guard let cls = resolveClassName(from: attributes),
                   let points = attributes["points"] else { break }
             if let cgPath = parsePolygon(points: points) {
-                parsedElements.append((className: cls, path: cgPath))
+                let finalPath = applyTransform(attributes, to: cgPath)
+                parsedElements.append((className: cls, path: finalPath))
             }
 
         case "rect":
-            guard let cls = attributes["class"],
+            guard let cls = resolveClassName(from: attributes),
                   let x = Double(attributes["x"] ?? "0"),
                   let y = Double(attributes["y"] ?? "0"),
                   let w = Double(attributes["width"] ?? "0"),
                   let h = Double(attributes["height"] ?? "0") else { break }
-
             let rect = CGRect(x: x, y: y, width: w, height: h)
-            var transform = CGAffineTransform.identity
-            if let transformStr = attributes["transform"] {
-                transform = parseTransform(transformStr)
-            }
-            let cgPath = CGPath(rect: rect, transform: &transform)
-            parsedElements.append((className: cls, path: cgPath))
+            let cgPath = CGPath(rect: rect, transform: nil)
+            let finalPath = applyTransform(attributes, to: cgPath)
+            parsedElements.append((className: cls, path: finalPath))
 
         default:
             break
@@ -307,8 +318,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
     // MARK: - Style Parsing
 
     private func parseStyleBlock(_ css: String) {
-        // Match patterns like:  .st0 { fill: #979839; }  or  .cls-1 { fill: #bdaa41; }
-        let pattern = #"\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*\{\s*fill:\s*(#[0-9a-fA-F]{3,8})\s*;\s*\}"#
+        // Match class rules containing a fill: property (supports multi-property rules)
+        let pattern = #"\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*\{[^}]*?fill:\s*(#[0-9a-fA-F]{3,8})[^}]*\}"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
         let range = NSRange(css.startIndex..., in: css)
 
@@ -320,6 +331,52 @@ final class SVGParser: NSObject, XMLParserDelegate {
             let hexColor = String(css[colorRange])
             styleColors[className] = hexColor
         }
+    }
+
+    // MARK: - Class / Color Resolution
+
+    /// Resolves a class name from element attributes, supporting CSS classes,
+    /// inline `style="fill:#hex"`, and direct `fill="#hex"` attributes.
+    private func resolveClassName(from attributes: [String: String]) -> String? {
+        // Priority 1: inline style attribute with fill
+        if let style = attributes["style"] {
+            let fillPattern = #"fill:\s*(#[0-9a-fA-F]{3,8})"#
+            if let regex = try? NSRegularExpression(pattern: fillPattern),
+               let match = regex.firstMatch(in: style, range: NSRange(style.startIndex..., in: style)),
+               let hexRange = Range(match.range(at: 1), in: style) {
+                let hex = String(style[hexRange])
+                let syntheticClass = "_inline_\(inlineStyleCounter)"
+                inlineStyleCounter += 1
+                styleColors[syntheticClass] = hex
+                return syntheticClass
+            }
+        }
+
+        // Priority 2: CSS class
+        if let cls = attributes["class"] {
+            // Also check for direct fill attribute as fallback if class has no CSS color
+            if styleColors[cls] == nil, let fillHex = attributes["fill"] {
+                styleColors[cls] = fillHex
+            }
+            return cls
+        }
+
+        // Priority 3: direct fill attribute
+        if let fillHex = attributes["fill"], fillHex.hasPrefix("#") {
+            let syntheticClass = "_fill_\(inlineStyleCounter)"
+            inlineStyleCounter += 1
+            styleColors[syntheticClass] = fillHex
+            return syntheticClass
+        }
+
+        return nil
+    }
+
+    /// Applies a transform attribute (if present) to a CGPath.
+    private func applyTransform(_ attributes: [String: String], to cgPath: CGPath) -> CGPath {
+        guard let transformStr = attributes["transform"] else { return cgPath }
+        var t = parseTransform(transformStr)
+        return cgPath.copy(using: &t) ?? cgPath
     }
 
     // MARK: - Geometry Helpers
@@ -349,41 +406,76 @@ final class SVGParser: NSObject, XMLParserDelegate {
 
     private func parseTransform(_ str: String) -> CGAffineTransform {
         var result = CGAffineTransform.identity
+        // Match all transform functions left-to-right: name(params)
+        let pattern = #"(translate|rotate|scale|matrix|skewX|skewY)\(([^)]+)\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return result }
+        let range = NSRange(str.startIndex..., in: str)
 
-        // Handle translate(tx, ty)
-        if let translateMatch = str.range(of: #"translate\(([^)]+)\)"#, options: .regularExpression) {
-            let inner = str[translateMatch]
-                .dropFirst("translate(".count)
-                .dropLast(1)
-            let nums = inner.split(whereSeparator: { $0.isWhitespace || $0 == "," })
+        regex.enumerateMatches(in: str, range: range) { match, _, _ in
+            guard let match,
+                  let nameRange = Range(match.range(at: 1), in: str),
+                  let paramsRange = Range(match.range(at: 2), in: str) else { return }
+            let name = String(str[nameRange])
+            let nums = String(str[paramsRange])
+                .split(whereSeparator: { $0.isWhitespace || $0 == "," })
                 .compactMap { Double($0) }
-            if nums.count >= 2 {
-                result = result.translatedBy(x: nums[0], y: nums[1])
-            } else if nums.count == 1 {
-                result = result.translatedBy(x: nums[0], y: 0)
-            }
-        }
 
-        // Handle rotate(degrees) or rotate(degrees, cx, cy)
-        if let rotateMatch = str.range(of: #"rotate\(([^)]+)\)"#, options: .regularExpression) {
-            let inner = str[rotateMatch]
-                .dropFirst("rotate(".count)
-                .dropLast(1)
-            let nums = inner.split(whereSeparator: { $0.isWhitespace || $0 == "," })
-                .compactMap { Double($0) }
-            if let degrees = nums.first {
+            switch name {
+            case "translate":
+                let tx = nums.count >= 1 ? nums[0] : 0
+                let ty = nums.count >= 2 ? nums[1] : 0
+                result = result.concatenating(
+                    CGAffineTransform(translationX: tx, y: ty)
+                )
+
+            case "rotate":
+                guard let degrees = nums.first else { break }
                 let radians = degrees * .pi / 180
                 if nums.count >= 3 {
                     let cx = nums[1], cy = nums[2]
-                    result = result.translatedBy(x: cx, y: cy)
-                    result = result.rotated(by: radians)
-                    result = result.translatedBy(x: -cx, y: -cy)
+                    var r = CGAffineTransform(translationX: cx, y: cy)
+                    r = r.rotated(by: radians)
+                    r = r.translatedBy(x: -cx, y: -cy)
+                    result = result.concatenating(r)
                 } else {
-                    result = result.rotated(by: radians)
+                    result = result.concatenating(
+                        CGAffineTransform(rotationAngle: radians)
+                    )
                 }
+
+            case "scale":
+                let sx = nums.count >= 1 ? nums[0] : 1
+                let sy = nums.count >= 2 ? nums[1] : sx
+                result = result.concatenating(
+                    CGAffineTransform(scaleX: sx, y: sy)
+                )
+
+            case "matrix":
+                guard nums.count >= 6 else { break }
+                result = result.concatenating(
+                    CGAffineTransform(a: nums[0], b: nums[1],
+                                      c: nums[2], d: nums[3],
+                                      tx: nums[4], ty: nums[5])
+                )
+
+            case "skewX":
+                guard let degrees = nums.first else { break }
+                let radians = degrees * .pi / 180
+                result = result.concatenating(
+                    CGAffineTransform(a: 1, b: 0, c: tan(radians), d: 1, tx: 0, ty: 0)
+                )
+
+            case "skewY":
+                guard let degrees = nums.first else { break }
+                let radians = degrees * .pi / 180
+                result = result.concatenating(
+                    CGAffineTransform(a: 1, b: tan(radians), c: 0, d: 1, tx: 0, ty: 0)
+                )
+
+            default:
+                break
             }
         }
-
         return result
     }
 }
@@ -392,8 +484,12 @@ final class SVGParser: NSObject, XMLParserDelegate {
 
 extension Color {
     init(hex: String) {
-        let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "#", with: "")
+        // Expand 3-digit shorthand: "abc" → "aabbcc"
+        if cleaned.count == 3 {
+            cleaned = cleaned.map { "\($0)\($0)" }.joined()
+        }
         var rgb: UInt64 = 0
         Scanner(string: cleaned).scanHexInt64(&rgb)
         let r = Double((rgb >> 16) & 0xFF) / 255.0
