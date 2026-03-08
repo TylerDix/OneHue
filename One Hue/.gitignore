@@ -2,3 +2,9 @@
 # AI tool worktrees
 .claude/
 **/.claude/
+
+# Build artifacts
+build/
+DerivedData/
+*.xcuserstate
+.DS_Store
