@@ -112,6 +112,15 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.bordered)
 
+                        Button {
+                            store.debugNearlyComplete()
+                            dismiss()
+                        } label: {
+                            Text("Nearly Complete (5 left)")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        .buttonStyle(.bordered)
+
                         LabeledContent("Elements") {
                             Text("\(store.document.totalElements)")
                                 .foregroundStyle(.secondary)

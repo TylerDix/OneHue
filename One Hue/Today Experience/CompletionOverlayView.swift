@@ -8,11 +8,13 @@ struct CompletionOverlayView: View {
 
     let message: String
     @ObservedObject var completionService: CompletionService
+    var onShare: (() -> Void)? = nil
 
     // Staged reveal
     @State private var showMessage = false
     @State private var showCount = false
     @State private var showCountdown = false
+    @State private var showShareButton = false
 
     // Live countdown
     @State private var countdownText = ""
@@ -59,6 +61,18 @@ struct CompletionOverlayView: View {
                     .transition(.opacity.animation(.easeIn(duration: 0.6)))
             }
 
+            if showShareButton, let onShare {
+                Button(action: onShare) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(10)
+                        .background(Circle().fill(.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.animation(.easeIn(duration: 0.6)))
+            }
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -83,6 +97,11 @@ struct CompletionOverlayView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation(.easeIn(duration: 0.6)) {
                 showCountdown = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.8) {
+            withAnimation(.easeIn(duration: 0.6)) {
+                showShareButton = true
             }
         }
     }

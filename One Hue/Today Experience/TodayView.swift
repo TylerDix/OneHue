@@ -4,8 +4,10 @@ struct TodayView: View {
     @StateObject private var store = ColoringStore()
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showSettings   = false
-    @State private var showCompletion = false
+    @State private var showSettings    = false
+    @State private var showCompletion  = false
+    @State private var showShareSheet  = false
+    @State private var shareImage: UIImage? = nil
 
     var body: some View {
         ZStack {
@@ -60,7 +62,8 @@ struct TodayView: View {
             if showCompletion {
                 CompletionOverlayView(
                     message: store.document.completionMessage,
-                    completionService: CompletionService.shared
+                    completionService: CompletionService.shared,
+                    onShare: { shareCompletedArtwork() }
                 )
                 .transition(.opacity)
             }
@@ -73,6 +76,11 @@ struct TodayView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
                 .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let image = shareImage {
+                ShareSheet(items: [image, "One Hue — \(store.currentArtwork.displayName)"])
+            }
         }
     }
 
@@ -125,14 +133,88 @@ struct TodayView: View {
 
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
+
+        // 0.0s — Canvas freezes (phase = .complete disables gestures).
+        //        Numbers dissolve (CanvasView handles this, ~1s).
+
+        // 1.0s — Slowly drift back to center (1.5s ease).
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.easeIn(duration: 0.6)) { showCompletion = true }
+            store.triggerCompletionDrift()
+        }
+
+        // 3.0s — Overlay gently appears.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            withAnimation(.easeIn(duration: 1.0)) { showCompletion = true }
         }
     }
 
     private func resetCompletionSequence() {
         showCompletion = false
     }
+
+    // MARK: - Share
+
+    private func shareCompletedArtwork() {
+        let allFilled = Set(0..<store.document.elements.count)
+        let canvasWidth: CGFloat = 1024
+        let canvasHeight = canvasWidth / store.document.aspectRatio
+
+        let caption = shareCaption
+
+        let renderer = ImageRenderer(content:
+            VStack(spacing: 0) {
+                SVGCanvasRenderer(
+                    document: store.document,
+                    filledElements: allFilled,
+                    selectedGroupIndex: 0,
+                    showNumbers: false,
+                    zoomLevel: 1.0,
+                    activeAnimations: [],
+                    flashTick: 0
+                )
+                .frame(width: canvasWidth, height: canvasHeight)
+
+                Text(caption)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .background(Color.black)
+        )
+        renderer.scale = 2.0
+        if let image = renderer.uiImage {
+            shareImage = image
+            showShareSheet = true
+        }
+    }
+
+    private var shareCaption: String {
+        let title = store.currentArtwork.displayName
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d, yyyy"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        let date = formatter.string(from: Date())
+
+        if let count = CompletionService.shared.globalCount, count > 0 {
+            let formatted = count.formatted(.number)
+            return "\(title) — \(date) — Colored by \(formatted) people"
+        }
+        return "\(title) — \(date)"
+    }
+}
+
+// MARK: - Share Sheet
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Previews

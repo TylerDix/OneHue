@@ -17,7 +17,20 @@ extension Artwork {
         Artwork(id: "sailboat",  fileName: "sailboat",  displayName: "Setting Sail",    completionMessage: "The wind doesn't care where you planned to go."),
         Artwork(id: "koi_pond",  fileName: "koi_pond",  displayName: "Koi Pond",        completionMessage: "Everything worth seeing moves slowly."),
         Artwork(id: "lantern",   fileName: "lantern",   displayName: "Paper Lanterns",  completionMessage: "A single flame can hold an entire evening."),
-        Artwork(id: "home",      fileName: "home",      displayName: "The Lake House",  completionMessage: "The lake doesn't know how beautiful it is."),
+        Artwork(id: "home",      fileName: "home",      displayName: "The Lake House",    completionMessage: "The lake doesn't know how beautiful it is."),
+        Artwork(id: "japanese",       fileName: "japanese",       displayName: "Wisteria Garden",   completionMessage: "The garden remembers every footstep it has softened."),
+        Artwork(id: "northerlights", fileName: "northerlights", displayName: "Northern Lights",   completionMessage: "The sky practices its colors when no one is keeping score."),
+        Artwork(id: "cobble",        fileName: "cobble",        displayName: "Cobblestone Lane",  completionMessage: "Old streets don't give directions. They give perspective."),
+        Artwork(id: "temple",        fileName: "temple",        displayName: "The Temple",        completionMessage: "The bell doesn't ring for anyone in particular."),
+        Artwork(id: "lighthouse",    fileName: "lighthouse",    displayName: "The Lighthouse",    completionMessage: "It never asks if anyone is watching."),
+        Artwork(id: "baloon",        fileName: "baloon",        displayName: "Hot Air Balloon",   completionMessage: "The ground looks different when you stop holding on to it."),
+        Artwork(id: "firefly",       fileName: "firefly",       displayName: "Fireflies",         completionMessage: "They carry their own light and never explain it."),
+        Artwork(id: "fishing",       fileName: "fishing",       displayName: "Gone Fishing",      completionMessage: "The river has nowhere to be, and neither do you."),
+        Artwork(id: "canyon",        fileName: "canyon",        displayName: "The Canyon",        completionMessage: "The river doesn't hurry, and the canyon is its proof."),
+        Artwork(id: "desert",        fileName: "desert",        displayName: "Desert Dusk",       completionMessage: "The sand remembers the shape of the wind."),
+        Artwork(id: "cityMarket",    fileName: "cityMarket",    displayName: "City Market",       completionMessage: "A thousand strangers, all choosing the same afternoon."),
+        Artwork(id: "starFish",      fileName: "starFish",      displayName: "Starfish",          completionMessage: "The tide gives back more than it takes."),
+        Artwork(id: "snowyVillage",  fileName: "snowyVillage",  displayName: "Snowy Village",     completionMessage: "Snow makes every rooftop the same height."),
     ]
 
     /// Deterministic daily artwork: same image for everyone on a given UTC date.
@@ -155,6 +168,10 @@ final class ColoringStore: ObservableObject {
         let group = document.groups[groupIdx]
         autoCompleteIfNearlyDone(group)
 
+        // Global auto-complete: if only a handful of elements remain across the
+        // entire artwork, fill them all so users never get stuck on invisible pixels.
+        autoCompleteGlobalIfNearlyDone()
+
         // Auto-advance to next incomplete group
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             advanceToNextIncompleteGroup()
@@ -192,6 +209,16 @@ final class ColoringStore: ObservableObject {
         filledElements.formUnion(remaining)
     }
 
+    /// When the overall artwork has very few elements remaining, auto-fill them all.
+    private func autoCompleteGlobalIfNearlyDone() {
+        let total = document.elements.count
+        let remaining = total - filledElements.count
+        // If 3 or fewer elements left, or 99%+ filled, finish the artwork
+        guard remaining > 0, remaining <= 3 || Double(filledElements.count) / Double(total) >= 0.99 else { return }
+        let allIndices = Set(0..<total)
+        filledElements.formUnion(allIndices)
+    }
+
     // MARK: - Auto-Fill Tiny Neighbors
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny"
@@ -224,6 +251,13 @@ final class ColoringStore: ObservableObject {
         filledElements = []
         phase = .painting
         Self.clearProgress(for: document.id)
+    }
+
+    /// Incremented to tell CanvasView to slowly drift back to center.
+    @Published private(set) var completionDriftToken: UInt = 0
+
+    func triggerCompletionDrift() {
+        completionDriftToken &+= 1
     }
 
     // MARK: - Find Next Unfilled
@@ -264,7 +298,14 @@ final class ColoringStore: ObservableObject {
 
     private func checkCompletion() {
         guard isComplete, phase != .complete else { return }
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        // Soft double-tap haptic
+        let impact = UIImpactFeedbackGenerator(style: .medium)
+        impact.impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+
         withAnimation { phase = .complete }
         Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
     }
@@ -276,6 +317,28 @@ final class ColoringStore: ObservableObject {
         filledElements = Set(0..<document.elements.count)
         phase = .complete
         Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
+    }
+
+    /// Fills everything except ~5 cells spread across groups, so you can
+    /// manually tap the last few and test the completion experience.
+    func debugNearlyComplete() {
+        autoCompleteEnabled = false
+        var allIndices = Set(0..<document.elements.count)
+
+        // Keep a few unfilled cells from the last group that has elements
+        let keep = 5
+        var kept = 0
+        for group in document.groups.reversed() {
+            for idx in group.elementIndices.reversed() {
+                guard kept < keep else { break }
+                allIndices.remove(idx)
+                kept += 1
+            }
+            if kept >= keep { break }
+        }
+
+        filledElements = allIndices
+        phase = .painting
     }
 
     // MARK: - Auto Complete

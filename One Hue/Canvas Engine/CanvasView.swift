@@ -1,5 +1,15 @@
 import SwiftUI
 
+// MARK: - Fill Animation Model
+
+/// Represents one blob-fill animation expanding from a tap point.
+struct FillAnimation {
+    let origin: CGPoint        // tap point in SVG space
+    let startTime: Date
+    let maxRadius: CGFloat     // distance to farthest element corner
+    let elementIndices: Set<Int>
+}
+
 // MARK: - CanvasView
 
 struct CanvasView: View {
@@ -22,9 +32,10 @@ struct CanvasView: View {
     // Phase animation
     @State private var showNumbers: Bool = true
 
-    // Fill flash animation
-    @State private var flashElements: [Int: Date] = [:]
+    // Blob fill animation
+    @State private var activeAnimations: [FillAnimation] = []
     @State private var flashTick: UInt = 0
+    @State private var blobOrigin: CGPoint? = nil
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
@@ -48,7 +59,7 @@ struct CanvasView: View {
                     selectedGroupIndex: store.selectedGroupIndex,
                     showNumbers: showNumbers,
                     zoomLevel: currentZoom,
-                    flashElements: flashElements,
+                    activeAnimations: activeAnimations,
                     flashTick: flashTick
                 )
                 .frame(width: renderSize.width, height: renderSize.height)
@@ -83,6 +94,10 @@ struct CanvasView: View {
         }
         .clipped()
         .onChange(of: store.phase) { _, phase in animate(to: phase) }
+        .onChange(of: store.completionDriftToken) { _, token in
+            guard token > 0 else { return }
+            slowDriftToCenter()
+        }
         .onChange(of: store.findTargetToken) { _, token in
             guard token > 0 else { return }
             zoomToRect(store.findTargetBounds)
@@ -90,17 +105,32 @@ struct CanvasView: View {
         .onChange(of: store.filledElements) { oldValue, newValue in
             let added = newValue.subtracting(oldValue)
             guard !added.isEmpty else { return }
-            let now = Date()
-            for idx in added { flashElements[idx] = now }
-            // Drive ~30fps re-renders for the fill glow
-            for frame in 1...18 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(frame) / 30.0) {
+
+            let origin = blobOrigin ?? store.document.elements[added.first!].centroid
+            let maxRadius = blobMaxRadius(from: origin, elements: added)
+
+            let animation = FillAnimation(
+                origin: origin,
+                startTime: Date(),
+                maxRadius: maxRadius,
+                elementIndices: added
+            )
+            activeAnimations.append(animation)
+
+            // Drive ~60fps re-renders for smooth blob expansion
+            let totalFrames = 36
+            for frame in 1...totalFrames {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(frame) / 60.0) {
                     flashTick &+= 1
                 }
             }
+
+            // Remove animation after it completes
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                for idx in added { flashElements.removeValue(forKey: idx) }
+                activeAnimations.removeAll { $0.startTime == animation.startTime }
             }
+
+            blobOrigin = nil
         }
         .onAppear { animate(to: store.phase) }
     }
@@ -132,25 +162,27 @@ struct CanvasView: View {
 
                 // While locked: paint freely
                 if isLocked {
-                    if let elementIdx = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
-                        store.tryFill(elementIndex: elementIdx)
+                    if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
+                        blobOrigin = hit.svgPoint
+                        store.tryFill(elementIndex: hit.elementIndex)
                     }
                     return
                 }
 
                 // First touch: decide paint or pan
-                guard let elementIdx = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) else {
+                guard let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) else {
                     panIfNeeded(value: value)
                     return
                 }
 
-                let groupIdx = store.document.elementGroupMap[elementIdx] ?? -1
+                let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
                 let isCorrect = groupIdx == store.selectedGroupIndex
-                let needsFill = !store.filledElements.contains(elementIdx)
+                let needsFill = !store.filledElements.contains(hit.elementIndex)
 
                 if isCorrect && needsFill {
                     isLocked = true
-                    store.tryFill(elementIndex: elementIdx)
+                    blobOrigin = hit.svgPoint
+                    store.tryFill(elementIndex: hit.elementIndex)
                 } else {
                     let dist = hypot(value.translation.width, value.translation.height)
                     if dist > 6 { panIfNeeded(value: value) }
@@ -167,7 +199,11 @@ struct CanvasView: View {
 
     // MARK: - Hit Testing
 
-    private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> Int? {
+    /// How far (in SVG units) to search for a nearby element when the
+    /// exact tap misses. Scales with zoom so it feels consistent on screen.
+    private static let tapMarginBase: CGFloat = 20
+
+    private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> (elementIndex: Int, svgPoint: CGPoint)? {
         // Transform screen point (in viewport space) → SVG coordinate space
         // Content is centered in the viewport
         let vcx = viewportSize.width / 2
@@ -194,8 +230,34 @@ struct CanvasView: View {
             let element = store.document.elements[idx]
             guard element.bounds.contains(svgPoint) else { continue }
             if element.path.contains(svgPoint) {
-                return idx
+                return (idx, svgPoint)
             }
+        }
+
+        // No exact hit — look for the nearest element within a generous margin.
+        // Margin shrinks as user zooms in for precision at high zoom.
+        let margin = Self.tapMarginBase / max(currentZoom, 0.5)
+        let searchRect = CGRect(x: svgX - margin, y: svgY - margin,
+                                width: margin * 2, height: margin * 2)
+
+        var bestIdx: Int?
+        var bestDist: CGFloat = .greatestFiniteMagnitude
+
+        // Gather candidates from the expanded area
+        let expanded = store.spatialHash.candidates(in: searchRect)
+        for idx in expanded {
+            let element = store.document.elements[idx]
+            let dx = element.centroid.x - svgX
+            let dy = element.centroid.y - svgY
+            let dist = dx * dx + dy * dy
+            if dist < bestDist {
+                bestDist = dist
+                bestIdx = idx
+            }
+        }
+
+        if let idx = bestIdx, bestDist < margin * margin {
+            return (idx, svgPoint)
         }
         return nil
     }
@@ -268,9 +330,35 @@ struct CanvasView: View {
         }
     }
 
+    /// Distance from origin to farthest bounding-box corner of the given elements.
+    private func blobMaxRadius(from origin: CGPoint, elements: Set<Int>) -> CGFloat {
+        var maxDist: CGFloat = 0
+        for idx in elements {
+            let bounds = store.document.elements[idx].bounds
+            for corner in [
+                CGPoint(x: bounds.minX, y: bounds.minY),
+                CGPoint(x: bounds.maxX, y: bounds.minY),
+                CGPoint(x: bounds.minX, y: bounds.maxY),
+                CGPoint(x: bounds.maxX, y: bounds.maxY),
+            ] {
+                maxDist = max(maxDist, hypot(corner.x - origin.x, corner.y - origin.y))
+            }
+        }
+        return maxDist
+    }
+
     private func resetZoom(to zoom: CGFloat = 1.0) {
         withAnimation(.easeInOut(duration: 0.3)) {
             currentZoom = zoom; lastZoom = zoom
+            offset = .zero; lastOffset = .zero
+        }
+    }
+
+    /// Slowly drifts back to center — called after the completion freeze.
+    private func slowDriftToCenter() {
+        cursorPosition = nil
+        withAnimation(.easeInOut(duration: 1.5)) {
+            currentZoom = 1.0; lastZoom = 1.0
             offset = .zero; lastOffset = .zero
         }
     }
@@ -328,11 +416,10 @@ struct SVGCanvasRenderer: View {
     let selectedGroupIndex: Int
     let showNumbers: Bool
     let zoomLevel: CGFloat
-    let flashElements: [Int: Date]
-    let flashTick: UInt  // drives re-renders during flash animation
+    let activeAnimations: [FillAnimation]
+    let flashTick: UInt  // drives re-renders during blob animation
 
-    /// How long the fill glow lasts (seconds)
-    private static let fillDuration: TimeInterval = 0.6
+    private static let blobDuration: TimeInterval = 0.6
 
     // MARK: - Checkerboard Tile
 
@@ -372,25 +459,55 @@ struct SVGCanvasRenderer: View {
 
             let now = Date()
 
-            // Pass 1: Fill all elements
+            // Pass 1: Fill all elements (with blob reveal for active animations)
             for element in document.elements {
                 let isFilled = filledElements.contains(element.id)
                 guard let groupIdx = document.elementGroupMap[element.id] else { continue }
                 let group = document.groups[groupIdx]
                 let path = Path(element.path)
 
-                if isFilled {
-                    ctx.fill(path, with: .color(group.color))
+                // Check if this element is part of an active blob animation
+                let anim = activeAnimations.first { $0.elementIndices.contains(element.id) }
 
-                    // Brief brightness pulse that fades out
-                    if let fillTime = flashElements[element.id] {
-                        let elapsed = now.timeIntervalSince(fillTime)
-                        if elapsed < Self.fillDuration {
-                            let t = elapsed / Self.fillDuration
-                            let alpha = (1.0 - t) * (1.0 - t) * 0.4
-                            ctx.fill(path, with: .color(.white.opacity(alpha)))
+                if isFilled, let anim = anim {
+                    // Animating: blob expanding from tap point
+                    let elapsed = now.timeIntervalSince(anim.startTime)
+                    let t = min(elapsed / Self.blobDuration, 1.0)
+                    let easedT = 1.0 - (1.0 - t) * (1.0 - t) // ease-out
+                    let currentRadius = easedT * anim.maxRadius
+
+                    // Fast check: is element fully inside the blob?
+                    let b = element.bounds
+                    let corners = [
+                        CGPoint(x: b.minX, y: b.minY), CGPoint(x: b.maxX, y: b.minY),
+                        CGPoint(x: b.minX, y: b.maxY), CGPoint(x: b.maxX, y: b.maxY),
+                    ]
+                    let fullyInside = corners.allSatisfy {
+                        hypot($0.x - anim.origin.x, $0.y - anim.origin.y) <= currentRadius
+                    }
+
+                    if fullyInside || t >= 1.0 {
+                        ctx.fill(path, with: .color(group.color))
+                    } else {
+                        // Draw muted base, then clip-reveal filled color
+                        let isSelected = groupIdx == selectedGroupIndex
+                        ctx.fill(path, with: .color(mutedColor(group.color, selected: isSelected)))
+
+                        ctx.drawLayer { layerCtx in
+                            let circle = Path(ellipseIn: CGRect(
+                                x: anim.origin.x - currentRadius,
+                                y: anim.origin.y - currentRadius,
+                                width: currentRadius * 2,
+                                height: currentRadius * 2
+                            ))
+                            layerCtx.clip(to: circle)
+                            layerCtx.fill(path, with: .color(group.color))
                         }
                     }
+
+                } else if isFilled {
+                    ctx.fill(path, with: .color(group.color))
+
                 } else {
                     let isSelected = groupIdx == selectedGroupIndex
                     ctx.fill(path, with: .color(mutedColor(group.color, selected: isSelected)))

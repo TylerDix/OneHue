@@ -119,4 +119,26 @@ struct SpatialHash {
         guard c >= 0, c < cols, r >= 0, r < rows else { return [] }
         return buckets[r * cols + c]
     }
+
+    /// Returns candidate element indices for all cells overlapping a rectangle.
+    func candidates(in rect: CGRect) -> [Int] {
+        let minCol = max(0, Int((rect.minX - origin.x) / cellSize))
+        let maxCol = min(cols - 1, Int((rect.maxX - origin.x) / cellSize))
+        let minRow = max(0, Int((rect.minY - origin.y) / cellSize))
+        let maxRow = min(rows - 1, Int((rect.maxY - origin.y) / cellSize))
+        guard minCol <= maxCol, minRow <= maxRow else { return [] }
+
+        var seen = Set<Int>()
+        var result: [Int] = []
+        for r in minRow...maxRow {
+            for c in minCol...maxCol {
+                for idx in buckets[r * cols + c] {
+                    if seen.insert(idx).inserted {
+                        result.append(idx)
+                    }
+                }
+            }
+        }
+        return result
+    }
 }
