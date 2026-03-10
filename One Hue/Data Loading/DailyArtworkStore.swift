@@ -31,6 +31,16 @@ extension Artwork {
         Artwork(id: "cityMarket",    fileName: "cityMarket",    displayName: "City Market",       completionMessage: "A thousand strangers, all choosing the same afternoon."),
         Artwork(id: "starFish",      fileName: "starFish",      displayName: "Starfish",          completionMessage: "The tide gives back more than it takes."),
         Artwork(id: "snowyVillage",  fileName: "snowyVillage",  displayName: "Snowy Village",     completionMessage: "Snow makes every rooftop the same height."),
+        Artwork(id: "airBalloon",    fileName: "airBalloon",    displayName: "Air Balloon",       completionMessage: "From up here, every worry is the size of a house."),
+        Artwork(id: "bench",         fileName: "bench",         displayName: "Park Bench",        completionMessage: "The best conversations happen where no one is in a hurry."),
+        Artwork(id: "cathedral",     fileName: "cathedral",     displayName: "The Cathedral",     completionMessage: "Stone remembers what hands intended."),
+        Artwork(id: "cherryBlossoms", fileName: "cherryBlossoms", displayName: "Cherry Blossoms", completionMessage: "They bloom knowing they won't stay."),
+        Artwork(id: "fairy",         fileName: "fairy",         displayName: "Fairy",             completionMessage: "Some things are only visible when you stop trying to see them."),
+        Artwork(id: "fishingBoats",  fileName: "fishingBoats",  displayName: "Fishing Boats",     completionMessage: "The harbor is safe, but that's not what boats are for."),
+        Artwork(id: "highway",       fileName: "highway",       displayName: "The Highway",       completionMessage: "Every road was someone's first step away from standing still."),
+        Artwork(id: "lantern2",      fileName: "lantern2",      displayName: "Lanterns II",       completionMessage: "Light finds its way without asking for directions."),
+        Artwork(id: "mountain",      fileName: "mountain",      displayName: "The Mountain",      completionMessage: "It was already there before anyone thought to climb it."),
+        Artwork(id: "turtles",       fileName: "turtles",       displayName: "Sea Turtles",       completionMessage: "They carry their home and never call it heavy."),
     ]
 
     /// Deterministic daily artwork: same image for everyone on a given UTC date.
@@ -62,7 +72,7 @@ final class ColoringStore: ObservableObject {
 
     @Published private(set) var filledElements: Set<Int> = [] {
         didSet {
-            persistProgress()
+            schedulePersist()
             checkCompletion()
         }
     }
@@ -70,6 +80,11 @@ final class ColoringStore: ObservableObject {
     // MARK: - Spatial Index
 
     private(set) var spatialHash: SpatialHash!
+
+    // MARK: - Haptics (pre-prepared for snappy response)
+
+    private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
+    private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
 
     // MARK: - Derived
 
@@ -118,6 +133,7 @@ final class ColoringStore: ObservableObject {
     // MARK: - Artwork Switching
 
     func loadArtwork(at index: Int) {
+        persistNow() // flush before switching
         autoCompleteEnabled = false
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
@@ -177,7 +193,7 @@ final class ColoringStore: ObservableObject {
             advanceToNextIncompleteGroup()
         }
 
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lightHaptic.impactOccurred()
         return .filled
     }
 
@@ -196,7 +212,7 @@ final class ColoringStore: ObservableObject {
     // MARK: - Auto-Complete Near-Done Groups
 
     /// When a group reaches this fraction filled, auto-fill the rest.
-    private let autoCompleteThreshold: Double = 0.95
+    private let autoCompleteThreshold: Double = 0.90
 
     private func autoCompleteIfNearlyDone(_ group: SVGColorGroup) {
         let total = group.elementIndices.count
@@ -300,13 +316,13 @@ final class ColoringStore: ObservableObject {
         guard isComplete, phase != .complete else { return }
 
         // Soft double-tap haptic
-        let impact = UIImpactFeedbackGenerator(style: .medium)
-        impact.impactOccurred()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        mediumHaptic.impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.lightHaptic.impactOccurred()
         }
 
         withAnimation { phase = .complete }
+        UserDefaults.standard.set(true, forKey: "onehue.completed.\(currentArtwork.id)")
         Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
     }
 
@@ -355,8 +371,9 @@ final class ColoringStore: ObservableObject {
     private func startAutoComplete() {
         stopAutoComplete()
         autoCompleteTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                self?.autoFillNextElement()
+                self.autoFillNextElement()
             }
         }
     }
@@ -383,11 +400,30 @@ final class ColoringStore: ObservableObject {
         }
     }
 
-    // MARK: - Persistence
+    // MARK: - Persistence (debounced)
 
-    private func persistProgress() {
+    private var persistTimer: Timer?
+
+    private func schedulePersist() {
+        persistTimer?.invalidate()
+        persistTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.persistNow()
+            }
+        }
+    }
+
+    func persistNow() {
+        persistTimer?.invalidate()
+        persistTimer = nil
         let array = Array(filledElements)
         UserDefaults.standard.set(array, forKey: Self.progressKey(for: document.id))
+    }
+
+    /// Checks if an artwork has been completed (proper flag, not heuristic).
+    static func isArtworkCompleted(_ artworkID: String) -> Bool {
+        UserDefaults.standard.bool(forKey: "onehue.completed.\(artworkID)")
     }
 
     private static func loadProgress(for docID: String) -> Set<Int> {

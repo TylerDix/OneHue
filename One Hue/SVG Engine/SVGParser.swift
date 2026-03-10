@@ -10,7 +10,9 @@ final class SVGParser: NSObject, XMLParserDelegate {
     static func parse(artwork: Artwork) -> SVGDocument? {
         guard let url = Bundle.main.url(forResource: artwork.fileName, withExtension: "svg"),
               let data = try? Data(contentsOf: url) else {
+            #if DEBUG
             print("[SVGParser] Could not find \(artwork.fileName).svg in bundle")
+            #endif
             return nil
         }
         return parse(data: data, id: artwork.id, title: artwork.displayName, completionMessage: artwork.completionMessage)
@@ -19,7 +21,9 @@ final class SVGParser: NSObject, XMLParserDelegate {
     static func parse(svgName: String) -> SVGDocument? {
         guard let url = Bundle.main.url(forResource: svgName, withExtension: "svg"),
               let data = try? Data(contentsOf: url) else {
+            #if DEBUG
             print("[SVGParser] Could not find \(svgName).svg in bundle")
+            #endif
             return nil
         }
         return parse(data: data, id: svgName)
@@ -30,7 +34,9 @@ final class SVGParser: NSObject, XMLParserDelegate {
         let xmlParser = XMLParser(data: data)
         xmlParser.delegate = parser
         guard xmlParser.parse() else {
+            #if DEBUG
             print("[SVGParser] XML parse failed: \(xmlParser.parserError?.localizedDescription ?? "unknown")")
+            #endif
             return nil
         }
         return parser.buildDocument()
@@ -299,17 +305,24 @@ final class SVGParser: NSObject, XMLParserDelegate {
 
             for (_, memberIndices) in components {
                 var unionBounds = CGRect.null
-                var largestArea: CGFloat = 0
-                var largestIdx = memberIndices[0]
+                var totalArea: CGFloat = 0
+                var weightedX: CGFloat = 0
+                var weightedY: CGFloat = 0
 
                 for idx in memberIndices {
                     let el = elements[idx]
                     unionBounds = unionBounds.union(el.bounds)
                     let area = el.bounds.width * el.bounds.height
-                    if area > largestArea {
-                        largestArea = area
-                        largestIdx = idx
-                    }
+                    weightedX += el.centroid.x * area
+                    weightedY += el.centroid.y * area
+                    totalArea += area
+                }
+
+                let center: CGPoint
+                if totalArea > 0 {
+                    center = CGPoint(x: weightedX / totalArea, y: weightedY / totalArea)
+                } else {
+                    center = CGPoint(x: unionBounds.midX, y: unionBounds.midY)
                 }
 
                 clusters.append(ElementCluster(
@@ -317,7 +330,7 @@ final class SVGParser: NSObject, XMLParserDelegate {
                     groupIndex: group.id,
                     elementIndices: memberIndices,
                     bounds: unionBounds,
-                    labelCenter: elements[largestIdx].centroid
+                    labelCenter: center
                 ))
 
                 for idx in memberIndices {

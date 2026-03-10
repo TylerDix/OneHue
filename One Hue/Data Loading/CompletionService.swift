@@ -88,6 +88,34 @@ final class CompletionService: ObservableObject {
         }
     }
 
+    // MARK: - Submit Feedback
+
+    /// Submits a star rating and optional comment for an artwork.
+    func submitFeedback(artworkID: String, rating: Int, comment: String) async {
+        guard let url = URL(string: "\(baseURL)/artwork_feedback") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+
+        let body: [String: Any] = [
+            "device_id": deviceID,
+            "artwork_id": artworkID,
+            "rating": rating,
+            "comment": comment
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        do {
+            let (_, _) = try await URLSession.shared.data(for: request)
+        } catch {
+            // Silent failure — offline is fine
+        }
+    }
+
     // MARK: - Helpers
 
     /// Everything anchored to UTC so the whole world shares the same "day".

@@ -7,6 +7,8 @@ struct SettingsView: View {
 
     @AppStorage("onehue.dailyReminder") private var dailyReminderEnabled = false
     @State private var showAbout = false
+    @State private var debugTapCount = 0
+    @State private var showDebug = false
 
     var body: some View {
         NavigationStack {
@@ -46,7 +48,7 @@ struct SettingsView: View {
                     }
                 }
 
-                // 4. Tagline
+                // 4. Tagline (5-tap reveals debug)
                 Section {
                     VStack(spacing: 6) {
                         Text("One Hue")
@@ -59,91 +61,78 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
-                }
-
-                // 5. Debug
-                Section("Debug") {
-                    VStack(spacing: 10) {
-                        // Artwork switcher (debug only — production uses daily rotation)
-                        HStack(spacing: 12) {
-                            Button { store.previousArtwork() } label: {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(.white.opacity(0.08)))
-                            }
-                            .buttonStyle(.plain)
-
-                            Text(store.document.title)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity)
-
-                            Button { store.nextArtwork() } label: {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(.white.opacity(0.08)))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        Toggle(isOn: $store.autoCompleteEnabled) {
-                            Text("Auto Complete")
-                        }
-
-                        Button(role: .destructive) {
-                            store.resetProgress()
-                        } label: {
-                            Text("Reset Progress")
-                                .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
-                            store.debugForceComplete()
-                            dismiss()
-                        } label: {
-                            Text("Force Complete")
-                                .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
-                            store.debugNearlyComplete()
-                            dismiss()
-                        } label: {
-                            Text("Nearly Complete (5 left)")
-                                .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .buttonStyle(.bordered)
-
-                        LabeledContent("Elements") {
-                            Text("\(store.document.totalElements)")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        LabeledContent("Groups") {
-                            Text("\(store.document.groups.count)")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        LabeledContent("ViewBox") {
-                            let vb = store.document.viewBox
-                            Text("\(Int(vb.width))×\(Int(vb.height))")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        LabeledContent("Phase") {
-                            Text(String(describing: store.phase))
-                                .foregroundStyle(.secondary)
+                    .onTapGesture {
+                        debugTapCount += 1
+                        if debugTapCount >= 5 {
+                            withAnimation { showDebug = true }
                         }
                     }
-                    .padding(.vertical, 4)
                 }
+
+                // Hidden debug (only after 5-tap)
+                if showDebug {
+                    Section("Dev") {
+                        VStack(spacing: 10) {
+                            HStack {
+                                Button { store.previousArtwork() } label: {
+                                    Image(systemName: "chevron.left")
+                                        .frame(width: 32, height: 32)
+                                }
+                                .buttonStyle(.bordered)
+
+                                Text(store.document.title)
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity)
+
+                                Button { store.nextArtwork() } label: {
+                                    Image(systemName: "chevron.right")
+                                        .frame(width: 32, height: 32)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+
+                            Button("Nearly Complete (5 left)") {
+                                store.debugNearlyComplete()
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+                            .frame(maxWidth: .infinity)
+
+                            Button("Force Complete") {
+                                store.debugForceComplete()
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+                            .frame(maxWidth: .infinity)
+
+                            Button(role: .destructive) {
+                                store.resetProgress()
+                            } label: {
+                                Text("Reset Progress")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+
+                            LabeledContent("Elements") {
+                                Text("\(store.filledElements.count) / \(store.document.totalElements)")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                            LabeledContent("Groups") {
+                                Text("\(store.document.groups.count)")
+                                    .foregroundStyle(.secondary)
+                            }
+                            LabeledContent("Phase") {
+                                Text(String(describing: store.phase))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .transition(.opacity)
+                }
+
             }
             .navigationTitle("Settings")
             .toolbar {

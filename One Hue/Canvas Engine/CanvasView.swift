@@ -104,9 +104,7 @@ struct CanvasView: View {
         }
         .onChange(of: store.filledElements) { oldValue, newValue in
             let added = newValue.subtracting(oldValue)
-            guard !added.isEmpty else { return }
-
-            let origin = blobOrigin ?? store.document.elements[added.first!].centroid
+            guard !added.isEmpty, let origin = blobOrigin else { return }
             let maxRadius = blobMaxRadius(from: origin, elements: added)
 
             let animation = FillAnimation(
@@ -201,7 +199,7 @@ struct CanvasView: View {
 
     /// How far (in SVG units) to search for a nearby element when the
     /// exact tap misses. Scales with zoom so it feels consistent on screen.
-    private static let tapMarginBase: CGFloat = 20
+    private static let tapMarginBase: CGFloat = 40
 
     private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> (elementIndex: Int, svgPoint: CGPoint)? {
         // Transform screen point (in viewport space) → SVG coordinate space
@@ -222,10 +220,8 @@ struct CanvasView: View {
         let svgY = (canvasY - svgOffsetY) / scale
         let svgPoint = CGPoint(x: svgX, y: svgY)
 
-        // Use spatial hash for candidate elements
+        // 1. Exact path hit — topmost element wins
         let candidates = store.spatialHash.candidates(at: svgPoint)
-
-        // Test in reverse order (topmost element in SVG = last in parse order)
         for idx in candidates.reversed() {
             let element = store.document.elements[idx]
             guard element.bounds.contains(svgPoint) else { continue }
@@ -234,8 +230,46 @@ struct CanvasView: View {
             }
         }
 
-        // No exact hit — look for the nearest element within a generous margin.
-        // Margin shrinks as user zooms in for precision at high zoom.
+        // 2. Cluster label hit — tapping on/near a number label fills
+        //    the nearest unfilled element in that cluster.
+        var bestLabelIdx: Int?
+        var bestLabelDist: CGFloat = .greatestFiniteMagnitude
+
+        for cluster in store.document.clusters {
+            let hasUnfilled = cluster.elementIndices.contains { !store.filledElements.contains($0) }
+            guard hasUnfilled else { continue }
+
+            let cdx = svgPoint.x - cluster.labelCenter.x
+            let cdy = svgPoint.y - cluster.labelCenter.y
+            let dist = hypot(cdx, cdy)
+
+            // Hit radius based on label font size (same formula as renderer)
+            let dim = min(cluster.bounds.width, cluster.bounds.height)
+            let fontSize = max(min(dim * 0.35, 60), 8)
+            let hitRadius = max(fontSize * 0.7, 20)
+
+            if dist < hitRadius, dist < bestLabelDist {
+                bestLabelDist = dist
+                // Pick nearest unfilled element in the cluster
+                if let nearest = cluster.elementIndices
+                    .filter({ !store.filledElements.contains($0) })
+                    .min(by: {
+                        let ea = store.document.elements[$0]
+                        let eb = store.document.elements[$1]
+                        return hypot(ea.centroid.x - svgX, ea.centroid.y - svgY)
+                             < hypot(eb.centroid.x - svgX, eb.centroid.y - svgY)
+                    }) {
+                    bestLabelIdx = nearest
+                }
+            }
+        }
+
+        if let idx = bestLabelIdx {
+            return (idx, svgPoint)
+        }
+
+        // 3. Fuzzy nearby element — use distance to bounding box edge
+        //    (not centroid) for better results near element borders.
         let margin = Self.tapMarginBase / max(currentZoom, 0.5)
         let searchRect = CGRect(x: svgX - margin, y: svgY - margin,
                                 width: margin * 2, height: margin * 2)
@@ -243,13 +277,15 @@ struct CanvasView: View {
         var bestIdx: Int?
         var bestDist: CGFloat = .greatestFiniteMagnitude
 
-        // Gather candidates from the expanded area
         let expanded = store.spatialHash.candidates(in: searchRect)
         for idx in expanded {
-            let element = store.document.elements[idx]
-            let dx = element.centroid.x - svgX
-            let dy = element.centroid.y - svgY
-            let dist = dx * dx + dy * dy
+            let b = store.document.elements[idx].bounds
+            // Distance from tap to nearest edge of bounding box
+            let nearX = max(b.minX, min(svgX, b.maxX))
+            let nearY = max(b.minY, min(svgY, b.maxY))
+            let edgeDx = svgX - nearX
+            let edgeDy = svgY - nearY
+            let dist = edgeDx * edgeDx + edgeDy * edgeDy
             if dist < bestDist {
                 bestDist = dist
                 bestIdx = idx
@@ -459,6 +495,17 @@ struct SVGCanvasRenderer: View {
 
             let now = Date()
 
+            // Hairline stroke style to close sub-pixel gaps between adjacent paths
+            let gapStroke = StrokeStyle(lineWidth: 0.4, lineJoin: .round)
+
+            // Pre-compute muted colors once per frame (avoids UIColor HSB conversion per element)
+            var mutedSel: [Int: Color] = [:]
+            var mutedOther: [Int: Color] = [:]
+            for group in document.groups {
+                mutedSel[group.id] = Self.computeMuted(group.color, selected: true)
+                mutedOther[group.id] = Self.computeMuted(group.color, selected: false)
+            }
+
             // Pass 1: Fill all elements (with blob reveal for active animations)
             for element in document.elements {
                 let isFilled = filledElements.contains(element.id)
@@ -488,10 +535,13 @@ struct SVGCanvasRenderer: View {
 
                     if fullyInside || t >= 1.0 {
                         ctx.fill(path, with: .color(group.color))
+                        ctx.stroke(path, with: .color(group.color), style: gapStroke)
                     } else {
                         // Draw muted base, then clip-reveal filled color
                         let isSelected = groupIdx == selectedGroupIndex
-                        ctx.fill(path, with: .color(mutedColor(group.color, selected: isSelected)))
+                        let muted = (isSelected ? mutedSel[groupIdx] : mutedOther[groupIdx]) ?? .gray
+                        ctx.fill(path, with: .color(muted))
+                        ctx.stroke(path, with: .color(muted), style: gapStroke)
 
                         ctx.drawLayer { layerCtx in
                             let circle = Path(ellipseIn: CGRect(
@@ -507,10 +557,13 @@ struct SVGCanvasRenderer: View {
 
                 } else if isFilled {
                     ctx.fill(path, with: .color(group.color))
+                    ctx.stroke(path, with: .color(group.color), style: gapStroke)
 
                 } else {
                     let isSelected = groupIdx == selectedGroupIndex
-                    ctx.fill(path, with: .color(mutedColor(group.color, selected: isSelected)))
+                    let muted = (isSelected ? mutedSel[groupIdx] : mutedOther[groupIdx]) ?? .gray
+                    ctx.fill(path, with: .color(muted))
+                    ctx.stroke(path, with: .color(muted), style: gapStroke)
                 }
             }
 
@@ -540,6 +593,7 @@ struct SVGCanvasRenderer: View {
             }
 
             // Pass 3: Number labels — one per cluster, graduated opacity on zoom
+            // Uses overlap detection to prevent stacking.
             if showNumbers {
                 let minVisible: CGFloat = 5
                 let fullVisible: CGFloat = 14
@@ -548,6 +602,17 @@ struct SVGCanvasRenderer: View {
                 let fadeStart: CGFloat = 2.0
                 let fadeEnd: CGFloat = 3.5
                 let otherGroupFade = 1.0 - min(max((zoomLevel - fadeStart) / (fadeEnd - fadeStart), 0), 1)
+
+                // Collect labels sorted by cluster area (largest first → priority)
+                struct LabelInfo {
+                    let center: CGPoint
+                    let fontSize: CGFloat
+                    let alpha: Double
+                    let groupNumber: Int
+                    let area: CGFloat
+                }
+
+                var labels: [LabelInfo] = []
 
                 for cluster in document.clusters {
                     let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
@@ -563,13 +628,44 @@ struct SVGCanvasRenderer: View {
 
                     let sizeAlpha = min((screenPt - minVisible) / (fullVisible - minVisible), 1.0)
                     let baseAlpha: Double = isSelected ? 0.9 : 0.45 * otherGroupFade
+                    let area = cluster.bounds.width * cluster.bounds.height
 
-                    let group = document.groups[cluster.groupIndex]
-                    var text = AttributedString("\(group.id + 1)")
-                    text.font = .system(size: fontSize, weight: .semibold, design: .rounded)
-                    text.foregroundColor = .white.opacity(baseAlpha * sizeAlpha)
+                    labels.append(LabelInfo(
+                        center: cluster.labelCenter,
+                        fontSize: fontSize,
+                        alpha: baseAlpha * sizeAlpha,
+                        groupNumber: document.groups[cluster.groupIndex].id + 1,
+                        area: area
+                    ))
+                }
 
-                    ctx.draw(Text(text), at: cluster.labelCenter, anchor: .center)
+                // Sort largest first — larger clusters get label priority
+                labels.sort { $0.area > $1.area }
+
+                // Place labels, skipping any that overlap an already-placed label
+                var placedRects: [CGRect] = []
+
+                for label in labels {
+                    // Approximate label bounds in SVG space
+                    let halfW = label.fontSize * 0.45
+                    let halfH = label.fontSize * 0.55
+                    let rect = CGRect(
+                        x: label.center.x - halfW,
+                        y: label.center.y - halfH,
+                        width: halfW * 2,
+                        height: halfH * 2
+                    )
+
+                    let overlaps = placedRects.contains { $0.intersects(rect) }
+                    guard !overlaps else { continue }
+
+                    placedRects.append(rect)
+
+                    var text = AttributedString("\(label.groupNumber)")
+                    text.font = .system(size: label.fontSize, weight: .semibold, design: .rounded)
+                    text.foregroundColor = .white.opacity(label.alpha)
+
+                    ctx.draw(Text(text), at: label.center, anchor: .center)
                 }
             }
         }
@@ -577,7 +673,7 @@ struct SVGCanvasRenderer: View {
 
     // MARK: - Color Helpers
 
-    private func mutedColor(_ color: Color, selected: Bool) -> Color {
+    private static func computeMuted(_ color: Color, selected: Bool) -> Color {
         let uiColor = UIColor(color)
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)

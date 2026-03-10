@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Bottom-anchored color palette for One Hue.
-/// Each swatch shows its group number and remaining element count.
+/// Each swatch shows its group number with a radial progress ring.
 /// Completed colors fall off the palette. Auto-scrolls to selection.
 struct PaletteView: View {
 
@@ -66,6 +66,7 @@ struct PaletteView: View {
     private func swatchButton(group: SVGColorGroup, remaining: Int, total: Int) -> some View {
         let isSelected = group.id == selectedIndex
         let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 46 : 38
+        let progress = total > 0 ? Double(total - remaining) / Double(total) : 0
 
         Button {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -73,33 +74,38 @@ struct PaletteView: View {
             }
         } label: {
             ZStack {
+                // Background circle
                 Circle()
                     .fill(group.color)
                     .frame(width: size, height: size)
                     .overlay(
                         Circle()
-                            .strokeBorder(.white.opacity(0.2), lineWidth: 1)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 1)
                     )
 
+                // Progress ring
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        .white.opacity(isSelected ? 0.9 : 0.6),
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                    )
+                    .frame(width: size + 4, height: size + 4)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.3), value: progress)
+
+                // Selection ring (outside progress ring)
                 if isSelected {
                     Circle()
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 2.5)
-                        .frame(width: size + 8, height: size + 8)
+                        .strokeBorder(.white.opacity(0.9), lineWidth: 2)
+                        .frame(width: size + 12, height: size + 12)
                 }
 
-                VStack(spacing: -1) {
-                    Text("\(group.id + 1)")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
-
-                    if remaining < total {
-                        Text("\(remaining)")
-                            .font(.system(size: 9, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .shadow(color: .black.opacity(0.4), radius: 1, x: 0, y: 1)
-                    }
-                }
+                // Group number
+                Text("\(group.id + 1)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
             }
             .scaleEffect(isSelected ? 1.1 : 1.0)
             .animation(.easeOut(duration: 0.15), value: isSelected)

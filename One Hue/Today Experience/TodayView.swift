@@ -7,6 +7,7 @@ struct TodayView: View {
     @State private var showSettings    = false
     @State private var showCompletion  = false
     @State private var showShareSheet  = false
+    @State private var showGallery     = false
     @State private var shareImage: UIImage? = nil
 
     var body: some View {
@@ -62,8 +63,10 @@ struct TodayView: View {
             if showCompletion {
                 CompletionOverlayView(
                     message: store.document.completionMessage,
+                    artworkID: store.currentArtwork.id,
                     completionService: CompletionService.shared,
-                    onShare: { shareCompletedArtwork() }
+                    onShare: { shareCompletedArtwork() },
+                    onNext: { loadNextArtwork() }
                 )
                 .transition(.opacity)
             }
@@ -73,8 +76,17 @@ struct TodayView: View {
                 showCompletion = true
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                store.persistNow()
+            }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showGallery) {
+            GalleryView(store: store)
                 .presentationDetents([.large])
         }
         .sheet(isPresented: $showShareSheet) {
@@ -110,6 +122,15 @@ struct TodayView: View {
                     .transition(.opacity)
             }
 
+            Button { showGallery = true } label: {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(10)
+                    .background(Circle().fill(.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
@@ -127,6 +148,13 @@ struct TodayView: View {
     private var hasUnfilledInSelectedGroup: Bool {
         let group = store.document.groups[store.selectedGroupIndex]
         return group.elementIndices.contains(where: { !store.filledElements.contains($0) })
+    }
+
+    // MARK: - Next Artwork
+
+    private func loadNextArtwork() {
+        withAnimation { showCompletion = false }
+        store.nextArtwork()
     }
 
     // MARK: - Completion Sequence
