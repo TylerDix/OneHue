@@ -141,9 +141,12 @@ final class ColoringStore: ObservableObject {
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
 
-        // Auto-complete group when 95%+ filled — forgiveness for invisible stragglers
+        // Auto-complete group when 90%+ filled — forgiveness for invisible stragglers
         let group = document.groups[groupIdx]
         autoCompleteIfNearlyDone(group)
+
+        // At 95%+ global, sweep remaining tiny elements across all groups
+        autoSweepTinyRemnants()
 
         // Global auto-complete: if only a handful of elements remain across the
         // entire artwork, fill them all so users never get stuck on invisible pixels.
@@ -195,6 +198,21 @@ final class ColoringStore: ObservableObject {
         filledElements.formUnion(remaining)
     }
 
+    /// When 95%+ of the artwork is filled, sweep any remaining tiny elements
+    /// across ALL groups. Large unfilled regions stay — only invisible specks vanish.
+    private func autoSweepTinyRemnants() {
+        let total = document.elements.count
+        guard total > 0,
+              Double(filledElements.count) / Double(total) >= 0.95 else { return }
+
+        for idx in 0..<total where !filledElements.contains(idx) {
+            let el = document.elements[idx]
+            if min(el.bounds.width, el.bounds.height) < Self.tinyThreshold {
+                filledElements.insert(idx)
+            }
+        }
+    }
+
     /// When the overall artwork has very few elements remaining, auto-fill them all.
     private func autoCompleteGlobalIfNearlyDone() {
         let total = document.elements.count
@@ -208,7 +226,7 @@ final class ColoringStore: ObservableObject {
     // MARK: - Auto-Fill Tiny Neighbors
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny"
-    private let tinyThreshold: CGFloat = 90
+    static let tinyThreshold: CGFloat = 90
     /// How far (SVG units) to look for adjacent tiny elements
     private let neighborMargin: CGFloat = 45
 
@@ -228,7 +246,7 @@ final class ColoringStore: ObservableObject {
                 guard groupElements.contains(idx) else { continue }
                 guard !filledElements.contains(idx), !toFill.contains(idx) else { continue }
                 let el = document.elements[idx]
-                guard min(el.bounds.width, el.bounds.height) < tinyThreshold else { continue }
+                guard min(el.bounds.width, el.bounds.height) < Self.tinyThreshold else { continue }
                 guard zone.intersects(el.bounds) else { continue }
                 toFill.insert(idx)
                 queue.append(idx)

@@ -5,11 +5,13 @@ Remove tiny sliver/artifact elements and edge bands from SVG artwork files.
 Parses each SVG, computes bounding boxes for all shape elements
 (path, rect, circle, ellipse, polygon), and removes:
   1. Slivers — elements whose min dimension falls below a threshold
-  2. Edge bands — thin strips hugging the top/bottom of the viewBox
+  2. Small specks — elements whose area falls below an area threshold
+  3. Edge bands — thin strips hugging the top/bottom of the viewBox
      (a common artifact from Adobe Illustrator Image Trace)
 
 Usage:
-    python3 tools/remove_slivers.py [--threshold 8] [--dry-run]
+    python3 tools/remove_slivers.py [--threshold 12] [--area-threshold 100]
+                                    [--dry-run] [--file X.svg]
 """
 
 import argparse
@@ -105,21 +107,19 @@ SHAPE_TAGS = {
 }
 
 
-def is_sliver(bbox, threshold, aspect_threshold):
+def is_sliver(bbox, threshold, area_threshold):
     """
     Determine if an element is a sliver/artifact.
 
     A sliver is an element where:
     - min(width, height) < threshold (tiny in at least one dimension), OR
-    - area is very small (< threshold^2 / 4), OR
-    - aspect ratio is extreme (> aspect_threshold) AND one dimension is small
+    - area < area_threshold (small overall even if somewhat square)
     """
     if bbox is None:
         return True  # can't compute bbox = likely degenerate
 
     x, y, w, h = bbox
     min_dim = min(w, h)
-    max_dim = max(w, h)
     area = w * h
 
     # Truly tiny: min dimension below threshold
@@ -127,7 +127,7 @@ def is_sliver(bbox, threshold, aspect_threshold):
         return True
 
     # Very small area even if somewhat square
-    if area < (threshold * threshold) / 2:
+    if area < area_threshold:
         return True
 
     return False
@@ -169,13 +169,15 @@ def parse_viewbox(root):
     return 1200.0, 1800.0
 
 
-def process_svg(filepath, threshold, aspect_threshold, dry_run):
+def process_svg(filepath, threshold, area_threshold, dry_run):
     """Process a single SVG file, removing sliver and edge band elements."""
     tree = ET.parse(filepath)
     root = tree.getroot()
     vb_width, vb_height = parse_viewbox(root)
 
-    removed = []
+    removed_slivers = 0
+    removed_bands = 0
+    removed_degenerate = 0
     kept = 0
 
     # Find all shape elements at any depth
@@ -186,43 +188,54 @@ def process_svg(filepath, threshold, aspect_threshold, dry_run):
         if elem.tag in SHAPE_TAGS:
             all_shapes.append(elem)
 
+    total_before = len(all_shapes)
+
     for elem in all_shapes:
         bbox = get_bbox(elem, elem.tag)
         reason = None
 
-        if is_sliver(bbox, threshold, aspect_threshold):
+        if bbox is None:
+            reason = "degenerate"
+        elif is_sliver(bbox, threshold, area_threshold):
             reason = "sliver"
         elif is_horizontal_band(bbox, vb_width):
             reason = "band"
 
         if reason:
             parent = parents_map.get(elem)
-            if parent is not None:
-                local_tag = elem.tag.replace(f"{{{SVG_NS}}}", "")
-                cls = elem.get("class", "")
-                if bbox:
-                    x, y, w, h = bbox
-                    removed.append(f"  {local_tag} class={cls} bbox=({w:.1f}x{h:.1f}) [{reason}]")
-                else:
-                    removed.append(f"  {local_tag} class={cls} bbox=None [{reason}]")
-                if not dry_run:
-                    parent.remove(elem)
+            if parent is not None and not dry_run:
+                parent.remove(elem)
+            if reason == "sliver":
+                removed_slivers += 1
+            elif reason == "band":
+                removed_bands += 1
+            else:
+                removed_degenerate += 1
         else:
             kept += 1
 
-    if not dry_run and removed:
+    total_removed = removed_slivers + removed_bands + removed_degenerate
+
+    if not dry_run and total_removed > 0:
         # Write back, preserving XML declaration
         tree.write(filepath, encoding="UTF-8", xml_declaration=True)
 
-    return kept, removed
+    return {
+        "before": total_before,
+        "after": kept,
+        "slivers": removed_slivers,
+        "bands": removed_bands,
+        "degenerate": removed_degenerate,
+        "total_removed": total_removed,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Remove tiny sliver elements from SVG artworks")
-    parser.add_argument("--threshold", type=float, default=8.0,
-                        help="Minimum dimension in SVG units (default: 8)")
-    parser.add_argument("--aspect-threshold", type=float, default=20.0,
-                        help="Aspect ratio threshold for sliver detection (default: 20)")
+    parser.add_argument("--threshold", type=float, default=12.0,
+                        help="Min dimension in SVG units (default: 12)")
+    parser.add_argument("--area-threshold", type=float, default=100.0,
+                        help="Min area in SVG units² (default: 100)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Report what would be removed without modifying files")
     parser.add_argument("--file", type=str, default=None,
@@ -239,26 +252,30 @@ def main():
         print(f"No SVG files found in {artworks_dir}")
         return
 
-    mode = "DRY RUN" if args.dry_run else "REMOVING"
-    print(f"\n{mode} slivers with threshold={args.threshold} SVG units\n")
+    mode = "DRY RUN" if args.dry_run else "CLEANING"
+    print(f"\n{mode} — threshold={args.threshold}, area={args.area_threshold}\n")
 
-    total_removed = 0
-    total_kept = 0
+    # Column widths
+    name_w = 30
+    header = f"{'File':<{name_w}} {'Before':>7} {'After':>7} {'Slivers':>8} {'Bands':>6} {'Degen':>6}"
+    print(header)
+    print("─" * len(header))
+
+    grand = {"before": 0, "after": 0, "slivers": 0, "bands": 0, "degenerate": 0, "total_removed": 0}
 
     for filepath in svg_files:
         name = os.path.basename(filepath)
-        kept, removed = process_svg(filepath, args.threshold, args.aspect_threshold, args.dry_run)
-        total_kept += kept
-        total_removed += len(removed)
+        stats = process_svg(filepath, args.threshold, args.area_threshold, args.dry_run)
 
-        if removed:
-            print(f"{name}: {kept} kept, {len(removed)} removed")
-            for desc in removed:
-                print(desc)
-        else:
-            print(f"{name}: {kept} elements, all clean")
+        for k in grand:
+            grand[k] += stats[k]
 
-    print(f"\nTotal: {total_kept} kept, {total_removed} removed across {len(svg_files)} files")
+        if stats["total_removed"] > 0:
+            print(f"{name:<{name_w}} {stats['before']:>7} {stats['after']:>7} {stats['slivers']:>8} {stats['bands']:>6} {stats['degenerate']:>6}")
+
+    print("─" * len(header))
+    print(f"{'TOTAL (' + str(len(svg_files)) + ' files)':<{name_w}} {grand['before']:>7} {grand['after']:>7} {grand['slivers']:>8} {grand['bands']:>6} {grand['degenerate']:>6}")
+    print(f"\n{grand['total_removed']} elements removed across {len(svg_files)} files")
 
 
 if __name__ == "__main__":

@@ -30,10 +30,11 @@ struct TodayView: View {
                         if store.phase == .painting && hasUnfilledInSelectedGroup {
                             Button { store.findNextUnfilled() } label: {
                                 Image(systemName: "scope")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .padding(10)
-                                    .background(Circle().fill(.white.opacity(0.08)))
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(12)
+                                    .background(Circle().fill(.black.opacity(0.35)))
+                                    .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Find next unfilled region")

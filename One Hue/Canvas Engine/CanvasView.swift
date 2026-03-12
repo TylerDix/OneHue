@@ -149,33 +149,51 @@ struct CanvasView: View {
 
                 cursorPosition = loc
 
-                // While locked: paint freely
+                // While locked: paint freely, snapping to selected color
                 if isLocked {
                     if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
-                        blobOrigin = hit.svgPoint
-                        store.tryFill(elementIndex: hit.elementIndex)
+                        let gIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
+                        if gIdx == store.selectedGroupIndex, !store.filledElements.contains(hit.elementIndex) {
+                            blobOrigin = hit.svgPoint
+                            store.tryFill(elementIndex: hit.elementIndex)
+                            return
+                        }
+                    }
+                    // Exact hit missed or wrong color — snap to nearest selected-color element
+                    let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
+                    if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
+                        blobOrigin = svg
+                        store.tryFill(elementIndex: snapIdx)
                     }
                     return
                 }
 
                 // First touch: decide paint or pan
-                guard let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) else {
-                    panIfNeeded(value: value)
+                if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
+                    let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
+                    let isCorrect = groupIdx == store.selectedGroupIndex
+                    let needsFill = !store.filledElements.contains(hit.elementIndex)
+
+                    if isCorrect && needsFill {
+                        isLocked = true
+                        blobOrigin = hit.svgPoint
+                        store.tryFill(elementIndex: hit.elementIndex)
+                        return
+                    }
+                }
+
+                // Exact hit missed or wrong color — try color snap
+                let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
+                if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
+                    isLocked = true
+                    blobOrigin = svg
+                    store.tryFill(elementIndex: snapIdx)
                     return
                 }
 
-                let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
-                let isCorrect = groupIdx == store.selectedGroupIndex
-                let needsFill = !store.filledElements.contains(hit.elementIndex)
-
-                if isCorrect && needsFill {
-                    isLocked = true
-                    blobOrigin = hit.svgPoint
-                    store.tryFill(elementIndex: hit.elementIndex)
-                } else {
-                    let dist = hypot(value.translation.width, value.translation.height)
-                    if dist > 6 { panIfNeeded(value: value) }
-                }
+                // Nothing matched — treat as pan
+                let dist = hypot(value.translation.width, value.translation.height)
+                if dist > 6 { panIfNeeded(value: value) }
             }
             .onEnded { _ in
                 guard store.phase == .painting else { return }
@@ -192,9 +210,12 @@ struct CanvasView: View {
     /// exact tap misses. Scales with zoom so it feels consistent on screen.
     private static let tapMarginBase: CGFloat = 50
 
-    private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> (elementIndex: Int, svgPoint: CGPoint)? {
-        // Transform screen point (in viewport space) → SVG coordinate space
-        // Content is centered in the viewport
+    /// How far (in SVG units) to search for a same-color unfilled element
+    /// when the exact tap misses or hits a wrong-color element.
+    private static let colorSnapRadiusBase: CGFloat = 120
+
+    /// Transform a screen point (in viewport space) to SVG coordinate space.
+    private func screenToSVGPoint(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> CGPoint {
         let vcx = viewportSize.width / 2
         let vcy = viewportSize.height / 2
         let dx = (point.x - vcx - offset.width) / currentZoom
@@ -207,9 +228,14 @@ struct CanvasView: View {
         let svgOffsetX = (renderSize.width - vb.width * scale) / 2
         let svgOffsetY = (renderSize.height - vb.height * scale) / 2
 
-        let svgX = (canvasX - svgOffsetX) / scale
-        let svgY = (canvasY - svgOffsetY) / scale
-        let svgPoint = CGPoint(x: svgX, y: svgY)
+        return CGPoint(x: (canvasX - svgOffsetX) / scale,
+                       y: (canvasY - svgOffsetY) / scale)
+    }
+
+    private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> (elementIndex: Int, svgPoint: CGPoint)? {
+        let svgPoint = screenToSVGPoint(point, viewportSize: viewportSize, renderSize: renderSize)
+        let svgX = svgPoint.x
+        let svgY = svgPoint.y
 
         // 1. Exact path hit — topmost element wins
         let candidates = store.spatialHash.candidates(at: svgPoint)
@@ -261,16 +287,21 @@ struct CanvasView: View {
 
         // 3. Fuzzy nearby element — use distance to bounding box edge
         //    (not centroid) for better results near element borders.
+        //    Prefer larger elements over tiny specks when both are nearby.
         let margin = Self.tapMarginBase / max(currentZoom, 0.5)
         let searchRect = CGRect(x: svgX - margin, y: svgY - margin,
                                 width: margin * 2, height: margin * 2)
 
+        let tinyThresh = ColoringStore.tinyThreshold
         var bestIdx: Int?
         var bestDist: CGFloat = .greatestFiniteMagnitude
+        var bestNonTinyIdx: Int?
+        var bestNonTinyDist: CGFloat = .greatestFiniteMagnitude
 
         let expanded = store.spatialHash.candidates(in: searchRect)
         for idx in expanded {
-            let b = store.document.elements[idx].bounds
+            let el = store.document.elements[idx]
+            let b = el.bounds
             // Distance from tap to nearest edge of bounding box
             let nearX = max(b.minX, min(svgX, b.maxX))
             let nearY = max(b.minY, min(svgY, b.maxY))
@@ -281,12 +312,63 @@ struct CanvasView: View {
                 bestDist = dist
                 bestIdx = idx
             }
+            if min(b.width, b.height) >= tinyThresh, dist < bestNonTinyDist {
+                bestNonTinyDist = dist
+                bestNonTinyIdx = idx
+            }
+        }
+
+        // If the closest match is tiny but a non-tiny element is within 2× the
+        // distance, prefer the larger element — avoids frustrating speck taps.
+        if let tinyIdx = bestIdx, let nonTinyIdx = bestNonTinyIdx, tinyIdx != nonTinyIdx {
+            let isTiny = min(store.document.elements[tinyIdx].bounds.width,
+                             store.document.elements[tinyIdx].bounds.height) < tinyThresh
+            if isTiny, bestNonTinyDist < bestDist * 4 { // 4× squared distance = 2× linear
+                bestIdx = nonTinyIdx
+                bestDist = bestNonTinyDist
+            }
         }
 
         if let idx = bestIdx, bestDist < margin * margin {
             return (idx, svgPoint)
         }
         return nil
+    }
+
+    /// Color-aware snap: finds the nearest unfilled element belonging to the
+    /// currently selected color group within a generous radius. Uses spatial
+    /// hash for performance — never iterates all document elements.
+    private func colorSnapHit(svgPoint: CGPoint, selectedGroup: Int) -> Int? {
+        guard selectedGroup < store.document.groups.count else { return nil }
+        let group = store.document.groups[selectedGroup]
+        let groupSet = Set(group.elementIndices)
+
+        let snapRadius = Self.colorSnapRadiusBase / max(currentZoom, 0.5)
+        let searchRect = CGRect(x: svgPoint.x - snapRadius,
+                                y: svgPoint.y - snapRadius,
+                                width: snapRadius * 2,
+                                height: snapRadius * 2)
+        let snapRadiusSq = snapRadius * snapRadius
+
+        var bestIdx: Int?
+        var bestDistSq: CGFloat = .greatestFiniteMagnitude
+
+        for idx in store.spatialHash.candidates(in: searchRect) {
+            guard groupSet.contains(idx),
+                  !store.filledElements.contains(idx) else { continue }
+
+            let b = store.document.elements[idx].bounds
+            let nearX = max(b.minX, min(svgPoint.x, b.maxX))
+            let nearY = max(b.minY, min(svgPoint.y, b.maxY))
+            let dx = svgPoint.x - nearX
+            let dy = svgPoint.y - nearY
+            let distSq = dx * dx + dy * dy
+
+            guard distSq < snapRadiusSq, distSq < bestDistSq else { continue }
+            bestDistSq = distSq
+            bestIdx = idx
+        }
+        return bestIdx
     }
 
     // MARK: - Pan / Zoom
