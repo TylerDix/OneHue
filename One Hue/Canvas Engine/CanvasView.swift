@@ -261,8 +261,11 @@ struct CanvasView: View {
             let dist = hypot(cdx, cdy)
 
             // Hit radius based on label font size (generous for easy tapping)
+            // Matches the boosted minimum from the rendering pass so
+            // pill-backed labels are as easy to tap as they look.
             let dim = min(cluster.bounds.width, cluster.bounds.height)
-            let fontSize = max(min(dim * 0.35, 60), 8)
+            let isSelectedCluster = cluster.groupIndex == store.selectedGroupIndex
+            let fontSize = max(min(dim * 0.35, 60), isSelectedCluster ? 18 : 8)
             let hitRadius = max(fontSize * 1.0, 24)
 
             if dist < hitRadius, dist < bestLabelDist {
@@ -717,6 +720,7 @@ struct SVGCanvasRenderer: View {
                     let alpha: Double
                     let groupNumber: Int
                     let area: CGFloat
+                    let needsPill: Bool   // background pill for boosted tiny labels
                 }
 
                 var labels: [LabelInfo] = []
@@ -729,7 +733,15 @@ struct SVGCanvasRenderer: View {
                     guard isSelected || otherGroupFade > 0.01 else { continue }
 
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
-                    let fontSize = max(min(dim * 0.35, 60), 4)
+                    let naturalSize = min(dim * 0.35, 60)
+
+                    // Selected-group labels get a readable minimum so tiny
+                    // clusters aren't invisible — a pill background makes
+                    // the oversized label stand out.
+                    let boostedMin: CGFloat = isSelected ? 18 : 4
+                    let fontSize = max(naturalSize, boostedMin)
+                    let needsPill = isSelected && naturalSize < boostedMin
+
                     let screenPt = fontSize * scale * zoomLevel
                     guard screenPt >= minVisible else { continue }
 
@@ -746,7 +758,8 @@ struct SVGCanvasRenderer: View {
                         fontSize: fontSize,
                         alpha: baseAlpha * sizeAlpha,
                         groupNumber: groupNumber,
-                        area: area
+                        area: area,
+                        needsPill: needsPill
                     ))
                 }
 
@@ -771,6 +784,21 @@ struct SVGCanvasRenderer: View {
                     guard !overlaps else { continue }
 
                     placedRects.append(rect)
+
+                    // Dark pill behind boosted labels so they pop against the artwork
+                    if label.needsPill {
+                        let pillW = label.fontSize * 1.1
+                        let pillH = label.fontSize * 1.3
+                        let pillRect = CGRect(
+                            x: label.center.x - pillW / 2,
+                            y: label.center.y - pillH / 2,
+                            width: pillW,
+                            height: pillH
+                        )
+                        let pill = Path(roundedRect: pillRect,
+                                        cornerRadius: label.fontSize * 0.3)
+                        ctx.fill(pill, with: .color(.black.opacity(0.5 * label.alpha)))
+                    }
 
                     var text = AttributedString("\(label.groupNumber)")
                     text.font = .system(size: label.fontSize, weight: .semibold, design: .rounded)
