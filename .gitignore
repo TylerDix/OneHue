@@ -2,3 +2,13 @@
 # AI tool worktrees
 .claude/
 **/.claude/
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# macOS
+.DS_Store
+*.swp

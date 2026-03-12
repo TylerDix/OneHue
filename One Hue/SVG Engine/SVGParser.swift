@@ -80,10 +80,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
             insideDefs = true
 
         case "style":
-            if insideDefs {
-                insideStyle = true
-                styleText = ""
-            }
+            insideStyle = true
+            styleText = ""
 
         case "path":
             guard let cls = resolveClassName(from: attributes),
@@ -308,6 +306,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
                 var totalArea: CGFloat = 0
                 var weightedX: CGFloat = 0
                 var weightedY: CGFloat = 0
+                var largestIdx = memberIndices[0]
+                var largestArea: CGFloat = 0
 
                 for idx in memberIndices {
                     let el = elements[idx]
@@ -316,13 +316,29 @@ final class SVGParser: NSObject, XMLParserDelegate {
                     weightedX += el.centroid.x * area
                     weightedY += el.centroid.y * area
                     totalArea += area
+                    if area > largestArea {
+                        largestArea = area
+                        largestIdx = idx
+                    }
                 }
 
-                let center: CGPoint
+                // Start with area-weighted centroid
+                var center: CGPoint
                 if totalArea > 0 {
                     center = CGPoint(x: weightedX / totalArea, y: weightedY / totalArea)
                 } else {
                     center = CGPoint(x: unionBounds.midX, y: unionBounds.midY)
+                }
+
+                // Verify the label sits inside an actual path; if not, find an interior point
+                let isInside = memberIndices.contains { elements[$0].path.contains(center) }
+                if !isInside {
+                    center = findInteriorPoint(
+                        elements: elements,
+                        memberIndices: memberIndices,
+                        largestIdx: largestIdx,
+                        fallback: center
+                    )
                 }
 
                 clusters.append(ElementCluster(
@@ -341,6 +357,64 @@ final class SVGParser: NSObject, XMLParserDelegate {
         }
 
         return (clusters, elementClusterMap)
+    }
+
+    // MARK: - Interior Point for Labels
+
+    /// Finds a point guaranteed to be inside one of the cluster's element paths.
+    /// Strategy: try the largest element's center first, then grid-search within
+    /// its bounds. Falls back to the original centroid if nothing works.
+    private static func findInteriorPoint(
+        elements: [SVGElement],
+        memberIndices: [Int],
+        largestIdx: Int,
+        fallback: CGPoint
+    ) -> CGPoint {
+        let largest = elements[largestIdx]
+
+        // Try 1: center of the largest element
+        let center = CGPoint(x: largest.bounds.midX, y: largest.bounds.midY)
+        if largest.path.contains(center) { return center }
+
+        // Try 2: grid search within the largest element's bounds
+        // Sample a grid of points and pick the one farthest from all edges
+        // (approximating the "pole of inaccessibility")
+        let b = largest.bounds
+        let steps = 7
+        let dx = b.width / CGFloat(steps + 1)
+        let dy = b.height / CGFloat(steps + 1)
+
+        var bestPoint = fallback
+        var bestDistToEdge: CGFloat = -1
+
+        for row in 1...steps {
+            for col in 1...steps {
+                let pt = CGPoint(x: b.minX + dx * CGFloat(col),
+                                 y: b.minY + dy * CGFloat(row))
+                if largest.path.contains(pt) {
+                    // Approximate distance from edge: min distance to bounding box edges
+                    let distToEdge = min(
+                        pt.x - b.minX, b.maxX - pt.x,
+                        pt.y - b.minY, b.maxY - pt.y
+                    )
+                    if distToEdge > bestDistToEdge {
+                        bestDistToEdge = distToEdge
+                        bestPoint = pt
+                    }
+                }
+            }
+        }
+
+        if bestDistToEdge > 0 { return bestPoint }
+
+        // Try 3: check other elements in the cluster
+        for idx in memberIndices where idx != largestIdx {
+            let el = elements[idx]
+            let elCenter = CGPoint(x: el.bounds.midX, y: el.bounds.midY)
+            if el.path.contains(elCenter) { return elCenter }
+        }
+
+        return fallback
     }
 
     // MARK: - Style Parsing

@@ -54,7 +54,8 @@ enum SVGPathParser {
     ) {
         let rel = cmd.isLowercase
 
-        switch cmd.lowercased().first! {
+        guard let firstChar = cmd.lowercased().first else { return }
+        switch firstChar {
         case "m":
             guard let pt = readPoint(tokens, at: &i) else { return }
             let dest = rel ? current + pt : pt

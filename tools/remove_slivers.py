@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Remove tiny sliver/artifact elements from SVG artwork files.
+Remove tiny sliver/artifact elements and edge bands from SVG artwork files.
 
 Parses each SVG, computes bounding boxes for all shape elements
-(path, rect, circle, ellipse, polygon), and removes any whose
-minimum dimension (width or height) falls below a threshold.
+(path, rect, circle, ellipse, polygon), and removes:
+  1. Slivers — elements whose min dimension falls below a threshold
+  2. Edge bands — thin strips hugging the top/bottom of the viewBox
+     (a common artifact from Adobe Illustrator Image Trace)
 
 Usage:
     python3 tools/remove_slivers.py [--threshold 8] [--dry-run]
@@ -131,10 +133,47 @@ def is_sliver(bbox, threshold, aspect_threshold):
     return False
 
 
+def is_horizontal_band(bbox, vb_width, min_width_frac=0.30, max_height=25, min_aspect=10):
+    """
+    Determine if an element is a horizontal band artifact (interior or edge).
+
+    Bands are thin horizontal strips spanning a significant portion of the
+    viewport width with a high aspect ratio. Common Image Trace artifact.
+    """
+    if bbox is None:
+        return False
+
+    x, y, w, h = bbox
+    if h <= 0:
+        h = 0.001
+    if w < vb_width * min_width_frac:
+        return False
+    if h > max_height:
+        return False
+    if w / h < min_aspect:
+        return False
+    return True
+
+
+def parse_viewbox(root):
+    """Extract viewBox dimensions from SVG root element."""
+    vb_str = root.get("viewBox", "")
+    if not vb_str:
+        # Fallback: try width/height attributes
+        w = float(root.get("width", "1200").replace("px", ""))
+        h = float(root.get("height", "1800").replace("px", ""))
+        return w, h
+    parts = vb_str.split()
+    if len(parts) == 4:
+        return float(parts[2]), float(parts[3])
+    return 1200.0, 1800.0
+
+
 def process_svg(filepath, threshold, aspect_threshold, dry_run):
-    """Process a single SVG file, removing sliver elements."""
+    """Process a single SVG file, removing sliver and edge band elements."""
     tree = ET.parse(filepath)
     root = tree.getroot()
+    vb_width, vb_height = parse_viewbox(root)
 
     removed = []
     kept = 0
@@ -149,16 +188,23 @@ def process_svg(filepath, threshold, aspect_threshold, dry_run):
 
     for elem in all_shapes:
         bbox = get_bbox(elem, elem.tag)
+        reason = None
+
         if is_sliver(bbox, threshold, aspect_threshold):
+            reason = "sliver"
+        elif is_horizontal_band(bbox, vb_width):
+            reason = "band"
+
+        if reason:
             parent = parents_map.get(elem)
             if parent is not None:
                 local_tag = elem.tag.replace(f"{{{SVG_NS}}}", "")
                 cls = elem.get("class", "")
                 if bbox:
                     x, y, w, h = bbox
-                    removed.append(f"  {local_tag} class={cls} bbox=({w:.1f}x{h:.1f})")
+                    removed.append(f"  {local_tag} class={cls} bbox=({w:.1f}x{h:.1f}) [{reason}]")
                 else:
-                    removed.append(f"  {local_tag} class={cls} bbox=None")
+                    removed.append(f"  {local_tag} class={cls} bbox=None [{reason}]")
                 if not dry_run:
                     parent.remove(elem)
         else:

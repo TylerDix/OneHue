@@ -9,6 +9,8 @@ struct TodayView: View {
     @State private var showShareSheet  = false
     @State private var showGallery     = false
     @State private var shareImage: UIImage? = nil
+    @AppStorage("onehue.onboardingShown") private var onboardingShown = false
+    @State private var showOnboarding = false
 
     var body: some View {
         ZStack {
@@ -34,23 +36,24 @@ struct TodayView: View {
                                     .background(Circle().fill(.white.opacity(0.08)))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Find next unfilled region")
                             .padding(16)
                             .transition(.opacity)
                         }
                     }
+                    .accessibilityLabel("Coloring canvas, \(store.document.title)")
+                    .accessibilityHint("Tap colored regions to fill them")
 
-                // Palette — only during painting
-                if store.phase == .painting {
-                    PaletteView(
-                        groups: store.document.groups,
-                        selectedIndex: $store.selectedGroupIndex,
-                        filledElements: store.filledElements,
-                        isComplete: store.isComplete
-                    )
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-                    .transition(.opacity)
-                }
+                // Palette — swatches animate away on completion but
+                // the container stays so the canvas doesn't jump.
+                PaletteView(
+                    groups: store.document.groups,
+                    selectedIndex: $store.selectedGroupIndex,
+                    filledElements: store.filledElements,
+                    isComplete: store.isComplete
+                )
+                .padding(.top, 8)
+                .padding(.bottom, 12)
             }
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
@@ -70,10 +73,24 @@ struct TodayView: View {
                 )
                 .transition(.opacity)
             }
+
+            // First-run onboarding
+            if showOnboarding {
+                OnboardingOverlay {
+                    onboardingShown = true
+                    withAnimation(.easeOut(duration: 0.4)) { showOnboarding = false }
+                }
+                .transition(.opacity)
+            }
         }
         .onAppear {
             if store.phase == .complete {
                 showCompletion = true
+            }
+            if !onboardingShown && store.phase != .complete {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation(.easeIn(duration: 0.5)) { showOnboarding = true }
+                }
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -122,6 +139,19 @@ struct TodayView: View {
                     .transition(.opacity)
             }
 
+            if store.canUndo {
+                Button { store.undo() } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .padding(10)
+                        .background(Circle().fill(.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Undo last fill")
+                .transition(.opacity)
+            }
+
             Button { showGallery = true } label: {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 15, weight: .semibold))
@@ -130,6 +160,7 @@ struct TodayView: View {
                     .background(Circle().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Gallery")
 
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
@@ -139,6 +170,7 @@ struct TodayView: View {
                     .background(Circle().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
         }
         .padding(.horizontal, 18)
     }
@@ -146,6 +178,7 @@ struct TodayView: View {
     // MARK: - Helpers
 
     private var hasUnfilledInSelectedGroup: Bool {
+        guard store.selectedGroupIndex < store.document.groups.count else { return false }
         let group = store.document.groups[store.selectedGroupIndex]
         return group.elementIndices.contains(where: { !store.filledElements.contains($0) })
     }
@@ -245,8 +278,94 @@ private struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
+// MARK: - Onboarding Overlay
+
+private struct OnboardingOverlay: View {
+    let onDismiss: () -> Void
+    @State private var step = 0
+
+    private let steps: [(icon: String, title: String, body: String)] = [
+        ("paintbrush.pointed", "Tap to fill", "Each region has a number. Select a color from the palette, then tap matching regions to fill them."),
+        ("scope", "Find regions", "Lost a region? Tap the scope button to zoom to the next unfilled area for your selected color."),
+        ("arrow.uturn.backward", "Undo mistakes", "Tapped the wrong spot? Use the undo button in the header to reverse your last fill."),
+    ]
+
+    var body: some View {
+        VStack(spacing: 28) {
+            Spacer()
+
+            let s = steps[step]
+
+            VStack(spacing: 18) {
+                Image(systemName: s.icon)
+                    .font(.system(size: 36, weight: .light))
+                    .foregroundStyle(.white.opacity(0.85))
+
+                Text(s.title)
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.95))
+
+                Text(s.body)
+                    .font(.system(size: 15, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .frame(maxWidth: 300)
+            }
+            .id(step)
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
+
+            // Step indicators
+            HStack(spacing: 8) {
+                ForEach(0..<steps.count, id: \.self) { i in
+                    Circle()
+                        .fill(.white.opacity(i == step ? 0.9 : 0.25))
+                        .frame(width: 7, height: 7)
+                }
+            }
+
+            // Action button
+            Button {
+                if step < steps.count - 1 {
+                    withAnimation(.easeInOut(duration: 0.3)) { step += 1 }
+                } else {
+                    onDismiss()
+                }
+            } label: {
+                Text(step < steps.count - 1 ? "Next" : "Start Coloring")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 12)
+                    .background(Capsule().fill(.white.opacity(0.15)))
+            }
+            .buttonStyle(.plain)
+
+            // Skip
+            if step < steps.count - 1 {
+                Button("Skip") { onDismiss() }
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.35))
+                    .buttonStyle(.plain)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.85).ignoresSafeArea())
+    }
+}
+
 // MARK: - Previews
 
 #Preview("Pristine") {
     TodayView().preferredColorScheme(.dark)
+}
+
+#Preview("Onboarding") {
+    OnboardingOverlay(onDismiss: {})
+        .preferredColorScheme(.dark)
 }

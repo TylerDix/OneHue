@@ -13,49 +13,46 @@ struct PaletteView: View {
     @State private var hasAppeared = false
 
     var body: some View {
-        if !isComplete {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: swatchSpacing) {
-                        ForEach(groups) { group in
-                            let remaining = remainingCount(for: group)
-                            let total = group.elementIndices.count
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: swatchSpacing) {
+                    ForEach(groups) { group in
+                        let remaining = remainingCount(for: group)
+                        let total = group.elementIndices.count
 
-                            if remaining > 0 {
-                                swatchButton(
-                                    group: group,
-                                    remaining: remaining,
-                                    total: total
-                                )
-                                .id(group.id)
-                                .opacity(hasAppeared ? 1 : 0)
-                                .offset(y: hasAppeared ? 0 : 10)
-                                .animation(
-                                    .easeOut(duration: 0.3).delay(Double(group.id) * 0.025),
-                                    value: hasAppeared
-                                )
-                                .transition(.asymmetric(
-                                    insertion: .scale.combined(with: .opacity),
-                                    removal: .move(edge: .bottom).combined(with: .opacity)
-                                ))
-                            }
+                        if remaining > 0 && !isComplete {
+                            swatchButton(
+                                group: group,
+                                remaining: remaining,
+                                total: total
+                            )
+                            .id(group.id)
+                            .opacity(hasAppeared ? 1 : 0)
+                            .offset(y: hasAppeared ? 0 : 10)
+                            .animation(
+                                .easeOut(duration: 0.3).delay(Double(group.id) * 0.025),
+                                value: hasAppeared
+                            )
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .move(edge: .bottom).combined(with: .opacity)
+                            ))
                         }
                     }
-                    .animation(.easeOut(duration: 0.4), value: completedGroupCount)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
                 }
-                .onChange(of: selectedIndex) { _, newIdx in
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        proxy.scrollTo(newIdx, anchor: .center)
-                    }
+                .animation(.easeOut(duration: 0.4), value: completedGroupCount)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+            }
+            .onChange(of: selectedIndex) { _, newIdx in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(newIdx, anchor: .center)
                 }
             }
-            .transition(.opacity)
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    hasAppeared = true
-                }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                hasAppeared = true
             }
         }
     }
@@ -111,6 +108,8 @@ struct PaletteView: View {
             .animation(.easeOut(duration: 0.15), value: isSelected)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Color \(group.id + 1), \(remaining) of \(total) remaining")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Counts

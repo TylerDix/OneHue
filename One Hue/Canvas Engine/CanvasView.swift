@@ -1,4 +1,5 @@
 import SwiftUI
+import QuartzCore
 
 // MARK: - Fill Animation Model
 
@@ -36,6 +37,8 @@ struct CanvasView: View {
     @State private var activeAnimations: [FillAnimation] = []
     @State private var flashTick: UInt = 0
     @State private var blobOrigin: CGPoint? = nil
+    @State private var animationLink: CADisplayLink?
+    @State private var animationTarget: DisplayLinkTarget?
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
@@ -114,23 +117,11 @@ struct CanvasView: View {
                 elementIndices: added
             )
             activeAnimations.append(animation)
-
-            // Drive ~60fps re-renders for smooth blob expansion
-            let totalFrames = 36
-            for frame in 1...totalFrames {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(frame) / 60.0) {
-                    flashTick &+= 1
-                }
-            }
-
-            // Remove animation after it completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                activeAnimations.removeAll { $0.startTime == animation.startTime }
-            }
-
+            startAnimationLoop()
             blobOrigin = nil
         }
         .onAppear { animate(to: store.phase) }
+        .onDisappear { stopAnimationLoop() }
     }
 
     // MARK: - Phase Animation
@@ -199,7 +190,7 @@ struct CanvasView: View {
 
     /// How far (in SVG units) to search for a nearby element when the
     /// exact tap misses. Scales with zoom so it feels consistent on screen.
-    private static let tapMarginBase: CGFloat = 40
+    private static let tapMarginBase: CGFloat = 50
 
     private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> (elementIndex: Int, svgPoint: CGPoint)? {
         // Transform screen point (in viewport space) → SVG coordinate space
@@ -243,10 +234,10 @@ struct CanvasView: View {
             let cdy = svgPoint.y - cluster.labelCenter.y
             let dist = hypot(cdx, cdy)
 
-            // Hit radius based on label font size (same formula as renderer)
+            // Hit radius based on label font size (generous for easy tapping)
             let dim = min(cluster.bounds.width, cluster.bounds.height)
             let fontSize = max(min(dim * 0.35, 60), 8)
-            let hitRadius = max(fontSize * 0.7, 20)
+            let hitRadius = max(fontSize * 1.0, 24)
 
             if dist < hitRadius, dist < bestLabelDist {
                 bestLabelDist = dist
@@ -399,6 +390,36 @@ struct CanvasView: View {
         }
     }
 
+    // MARK: - Animation Loop
+
+    /// Starts a CADisplayLink-driven loop for blob animations. Runs at display
+    /// refresh rate and automatically stops when all animations finish.
+    private func startAnimationLoop() {
+        guard animationLink == nil else { return }
+        let target = DisplayLinkTarget { [self] in
+            // Tick the Canvas redraw
+            flashTick &+= 1
+
+            // Prune finished animations (0.6s blob + 0.1s margin)
+            let now = Date()
+            activeAnimations.removeAll { now.timeIntervalSince($0.startTime) > 0.7 }
+
+            if activeAnimations.isEmpty {
+                stopAnimationLoop()
+            }
+        }
+        animationTarget = target
+        let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
+        link.add(to: .main, forMode: .common)
+        animationLink = link
+    }
+
+    private func stopAnimationLoop() {
+        animationLink?.invalidate()
+        animationLink = nil
+        animationTarget = nil
+    }
+
     // MARK: - Find / Zoom-to-Target
 
     /// Smoothly zooms and pans to center the given SVG-space rect in the viewport.
@@ -464,17 +485,18 @@ struct SVGCanvasRenderer: View {
         let cell = 24
         let size = cell * 2
         let space = CGColorSpaceCreateDeviceRGB()
-        let ctx = CGContext(
+        guard let ctx = CGContext(
             data: nil, width: size, height: size,
             bitsPerComponent: 8, bytesPerRow: 0,
             space: space,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
+        ) else { return Image(systemName: "checkerboard.rectangle") }
         ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
         ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.15))
         ctx.fill(CGRect(x: 0, y: 0, width: cell, height: cell))
         ctx.fill(CGRect(x: cell, y: cell, width: cell, height: cell))
-        return Image(decorative: ctx.makeImage()!, scale: 1)
+        guard let cgImage = ctx.makeImage() else { return Image(systemName: "checkerboard.rectangle") }
+        return Image(decorative: cgImage, scale: 1)
     }()
 
     // MARK: - Body
@@ -486,12 +508,14 @@ struct SVGCanvasRenderer: View {
             let scaleY = size.height / vb.height
             let scale = min(scaleX, scaleY)
 
-            let offsetX = (size.width - vb.width * scale) / 2
-            let offsetY = (size.height - vb.height * scale) / 2
-
             var ctx = context
-            ctx.translateBy(x: offsetX, y: offsetY)
-            ctx.scaleBy(x: scale, y: scale)
+            // Slight over-scale to hide any residual edge artifacts from Image Trace exports
+            let overScale: CGFloat = 1.012
+            let adjScale = scale * overScale
+            let adjOffsetX = (size.width - vb.width * adjScale) / 2
+            let adjOffsetY = (size.height - vb.height * adjScale) / 2
+            ctx.translateBy(x: adjOffsetX, y: adjOffsetY)
+            ctx.scaleBy(x: adjScale, y: adjScale)
 
             let now = Date()
 
@@ -509,7 +533,8 @@ struct SVGCanvasRenderer: View {
             // Pass 1: Fill all elements (with blob reveal for active animations)
             for element in document.elements {
                 let isFilled = filledElements.contains(element.id)
-                guard let groupIdx = document.elementGroupMap[element.id] else { continue }
+                guard let groupIdx = document.elementGroupMap[element.id],
+                      groupIdx < document.groups.count else { continue }
                 let group = document.groups[groupIdx]
                 let path = Path(element.path)
 
@@ -568,7 +593,7 @@ struct SVGCanvasRenderer: View {
             }
 
             // Pass 2: Checkerboard on selected group's unfilled elements
-            if showNumbers {
+            if showNumbers, selectedGroupIndex < document.groups.count {
                 let selectedGroup = document.groups[selectedGroupIndex]
                 var combinedPath = Path()
                 for idx in selectedGroup.elementIndices {
@@ -630,11 +655,15 @@ struct SVGCanvasRenderer: View {
                     let baseAlpha: Double = isSelected ? 0.9 : 0.45 * otherGroupFade
                     let area = cluster.bounds.width * cluster.bounds.height
 
+                    let groupNumber = cluster.groupIndex < document.groups.count
+                        ? document.groups[cluster.groupIndex].id + 1
+                        : cluster.groupIndex + 1
+
                     labels.append(LabelInfo(
                         center: cluster.labelCenter,
                         fontSize: fontSize,
                         alpha: baseAlpha * sizeAlpha,
-                        groupNumber: document.groups[cluster.groupIndex].id + 1,
+                        groupNumber: groupNumber,
                         area: area
                     ))
                 }
@@ -690,6 +719,15 @@ struct SVGCanvasRenderer: View {
                          brightness: Double(baseBrightness * 0.3))
         }
     }
+}
+
+// MARK: - DisplayLink Target
+
+/// Bridging class for CADisplayLink since it requires an @objc target.
+private final class DisplayLinkTarget: NSObject {
+    let callback: () -> Void
+    init(callback: @escaping () -> Void) { self.callback = callback }
+    @objc func tick() { callback() }
 }
 
 // MARK: - Previews

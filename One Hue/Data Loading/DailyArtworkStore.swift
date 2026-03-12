@@ -2,65 +2,6 @@ import SwiftUI
 import Combine
 import UIKit
 
-// MARK: - Artwork Catalog
-
-struct Artwork: Identifiable {
-    let id: String               // stable key for persistence
-    let fileName: String         // SVG filename without extension
-    let displayName: String      // human-readable name shown in UI
-    let completionMessage: String
-}
-
-extension Artwork {
-    static let catalog: [Artwork] = [
-        Artwork(id: "moon",      fileName: "moon",      displayName: "Moonlit Night",   completionMessage: "Tonight, this moon belongs to everyone who colored it."),
-        Artwork(id: "sailboat",  fileName: "sailboat",  displayName: "Setting Sail",    completionMessage: "The wind doesn't care where you planned to go."),
-        Artwork(id: "koi_pond",  fileName: "koi_pond",  displayName: "Koi Pond",        completionMessage: "Everything worth seeing moves slowly."),
-        Artwork(id: "lantern",   fileName: "lantern",   displayName: "Paper Lanterns",  completionMessage: "A single flame can hold an entire evening."),
-        Artwork(id: "home",      fileName: "home",      displayName: "The Lake House",    completionMessage: "The lake doesn't know how beautiful it is."),
-        Artwork(id: "japanese",       fileName: "japanese",       displayName: "Wisteria Garden",   completionMessage: "The garden remembers every footstep it has softened."),
-        Artwork(id: "northerlights", fileName: "northerlights", displayName: "Northern Lights",   completionMessage: "The sky practices its colors when no one is keeping score."),
-        Artwork(id: "cobble",        fileName: "cobble",        displayName: "Cobblestone Lane",  completionMessage: "Old streets don't give directions. They give perspective."),
-        Artwork(id: "temple",        fileName: "temple",        displayName: "The Temple",        completionMessage: "The bell doesn't ring for anyone in particular."),
-        Artwork(id: "lighthouse",    fileName: "lighthouse",    displayName: "The Lighthouse",    completionMessage: "It never asks if anyone is watching."),
-        Artwork(id: "baloon",        fileName: "baloon",        displayName: "Hot Air Balloon",   completionMessage: "The ground looks different when you stop holding on to it."),
-        Artwork(id: "firefly",       fileName: "firefly",       displayName: "Fireflies",         completionMessage: "They carry their own light and never explain it."),
-        Artwork(id: "fishing",       fileName: "fishing",       displayName: "Gone Fishing",      completionMessage: "The river has nowhere to be, and neither do you."),
-        Artwork(id: "canyon",        fileName: "canyon",        displayName: "The Canyon",        completionMessage: "The river doesn't hurry, and the canyon is its proof."),
-        Artwork(id: "desert",        fileName: "desert",        displayName: "Desert Dusk",       completionMessage: "The sand remembers the shape of the wind."),
-        Artwork(id: "cityMarket",    fileName: "cityMarket",    displayName: "City Market",       completionMessage: "A thousand strangers, all choosing the same afternoon."),
-        Artwork(id: "starFish",      fileName: "starFish",      displayName: "Starfish",          completionMessage: "The tide gives back more than it takes."),
-        Artwork(id: "snowyVillage",  fileName: "snowyVillage",  displayName: "Snowy Village",     completionMessage: "Snow makes every rooftop the same height."),
-        Artwork(id: "airBalloon",    fileName: "airBalloon",    displayName: "Air Balloon",       completionMessage: "From up here, every worry is the size of a house."),
-        Artwork(id: "bench",         fileName: "bench",         displayName: "Park Bench",        completionMessage: "The best conversations happen where no one is in a hurry."),
-        Artwork(id: "cathedral",     fileName: "cathedral",     displayName: "The Cathedral",     completionMessage: "Stone remembers what hands intended."),
-        Artwork(id: "cherryBlossoms", fileName: "cherryBlossoms", displayName: "Cherry Blossoms", completionMessage: "They bloom knowing they won't stay."),
-        Artwork(id: "fairy",         fileName: "fairy",         displayName: "Fairy",             completionMessage: "Some things are only visible when you stop trying to see them."),
-        Artwork(id: "fishingBoats",  fileName: "fishingBoats",  displayName: "Fishing Boats",     completionMessage: "The harbor is safe, but that's not what boats are for."),
-        Artwork(id: "highway",       fileName: "highway",       displayName: "The Highway",       completionMessage: "Every road was someone's first step away from standing still."),
-        Artwork(id: "lantern2",      fileName: "lantern2",      displayName: "Lanterns II",       completionMessage: "Light finds its way without asking for directions."),
-        Artwork(id: "mountain",      fileName: "mountain",      displayName: "The Mountain",      completionMessage: "It was already there before anyone thought to climb it."),
-        Artwork(id: "turtles",       fileName: "turtles",       displayName: "Sea Turtles",       completionMessage: "They carry their home and never call it heavy."),
-    ]
-
-    /// Deterministic daily artwork: same image for everyone on a given UTC date.
-    /// Cycles through the catalog using days-since-epoch mod catalog size.
-    static func today() -> (artwork: Artwork, index: Int) {
-        let todayStr = CompletionService.todayUTC()
-        return forDateString(todayStr)
-    }
-
-    static func forDateString(_ dateStr: String) -> (artwork: Artwork, index: Int) {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = TimeZone(identifier: "UTC")
-        let date = f.date(from: dateStr) ?? Date()
-        let daysSinceEpoch = Int(date.timeIntervalSince1970) / 86400
-        let index = daysSinceEpoch % catalog.count
-        return (catalog[index], index)
-    }
-}
-
 @MainActor
 final class ColoringStore: ObservableObject {
 
@@ -80,6 +21,14 @@ final class ColoringStore: ObservableObject {
     // MARK: - Spatial Index
 
     private(set) var spatialHash: SpatialHash!
+
+    // MARK: - Undo Stack
+
+    /// Each entry records the elements added by a single fill action.
+    private var undoStack: [Set<Int>] = []
+    private static let maxUndoDepth = 30
+
+    var canUndo: Bool { !undoStack.isEmpty && phase == .painting }
 
     // MARK: - Haptics (pre-prepared for snappy response)
 
@@ -102,7 +51,10 @@ final class ColoringStore: ObservableObject {
     }
 
     var selectedGroup: SVGColorGroup {
-        document.groups[selectedGroupIndex]
+        guard selectedGroupIndex < document.groups.count else {
+            return document.groups[0]  // sentinel fallback
+        }
+        return document.groups[selectedGroupIndex]
     }
 
     // MARK: - Available Artworks
@@ -110,14 +62,18 @@ final class ColoringStore: ObservableObject {
     private(set) var currentArtworkIndex: Int = 0
 
     var currentArtwork: Artwork {
-        Artwork.catalog[currentArtworkIndex]
+        let catalog = Artwork.catalog
+        guard currentArtworkIndex >= 0, currentArtworkIndex < catalog.count else {
+            return catalog[0]
+        }
+        return catalog[currentArtworkIndex]
     }
 
     // MARK: - Init
 
     init() {
         let (artwork, index) = Artwork.today()
-        let doc = SVGParser.parse(artwork: artwork)
+        let doc = SVGDocumentCache.shared.document(for: artwork)
               ?? SVGDocument.empty(id: "fallback")
         self.currentArtworkIndex = index
         self.document = doc
@@ -135,10 +91,11 @@ final class ColoringStore: ObservableObject {
     func loadArtwork(at index: Int) {
         persistNow() // flush before switching
         autoCompleteEnabled = false
+        undoStack.removeAll()
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
         let artwork = catalog[index]
-        let doc = SVGParser.parse(artwork: artwork)
+        let doc = SVGDocumentCache.shared.document(for: artwork)
               ?? SVGDocument.empty(id: "fallback")
         currentArtworkIndex = index
         document = doc
@@ -166,7 +123,11 @@ final class ColoringStore: ObservableObject {
         guard !filledElements.contains(elementIndex) else { return .alreadyFilled }
 
         let groupIdx = document.elementGroupMap[elementIndex] ?? -1
-        guard groupIdx == selectedGroupIndex else { return .wrongGroup }
+        guard groupIdx == selectedGroupIndex,
+              groupIdx < document.groups.count else { return .wrongGroup }
+
+        // Snapshot before any mutations so undo captures the full delta
+        let beforeFill = filledElements
 
         // Fill entire cluster containing the tapped element
         var toFill: Set<Int> = [elementIndex]
@@ -187,6 +148,15 @@ final class ColoringStore: ObservableObject {
         // Global auto-complete: if only a handful of elements remain across the
         // entire artwork, fill them all so users never get stuck on invisible pixels.
         autoCompleteGlobalIfNearlyDone()
+
+        // Record undo action: full delta including any auto-completed elements
+        let fullDelta = filledElements.subtracting(beforeFill)
+        if !fullDelta.isEmpty {
+            undoStack.append(fullDelta)
+            if undoStack.count > Self.maxUndoDepth {
+                undoStack.removeFirst()
+            }
+        }
 
         // Auto-advance to next incomplete group
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
@@ -243,16 +213,19 @@ final class ColoringStore: ObservableObject {
     private let neighborMargin: CGFloat = 45
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group
-    /// elements and add them to `toFill`.
+    /// elements and add them to `toFill`. Uses spatial hash for O(nearby) lookup
+    /// instead of scanning all group elements per queue item.
     private func collectTinyNeighbors(from seeds: Set<Int>, groupIndex: Int, into toFill: inout Set<Int>) {
-        let group = document.groups[groupIndex]
+        guard groupIndex < document.groups.count else { return }
+        let groupElements = Set(document.groups[groupIndex].elementIndices)
         var queue = Array(seeds)
 
         while !queue.isEmpty {
             let current = queue.removeFirst()
             let zone = document.elements[current].bounds.insetBy(dx: -neighborMargin, dy: -neighborMargin)
 
-            for idx in group.elementIndices {
+            for idx in spatialHash.candidates(in: zone) {
+                guard groupElements.contains(idx) else { continue }
                 guard !filledElements.contains(idx), !toFill.contains(idx) else { continue }
                 let el = document.elements[idx]
                 guard min(el.bounds.width, el.bounds.height) < tinyThreshold else { continue }
@@ -263,7 +236,26 @@ final class ColoringStore: ObservableObject {
         }
     }
 
+    // MARK: - Undo
+
+    func undo() {
+        guard let lastAction = undoStack.popLast() else { return }
+        filledElements.subtract(lastAction)
+
+        // Ensure the selected group has unfilled elements; if not, switch to one that does
+        if selectedGroupIndex < document.groups.count {
+            let group = document.groups[selectedGroupIndex]
+            let hasUnfilled = group.elementIndices.contains { !filledElements.contains($0) }
+            if !hasUnfilled {
+                advanceToNextIncompleteGroup()
+            }
+        }
+
+        lightHaptic.impactOccurred()
+    }
+
     func resetProgress() {
+        undoStack.removeAll()
         filledElements = []
         phase = .painting
         Self.clearProgress(for: document.id)
@@ -283,19 +275,27 @@ final class ColoringStore: ObservableObject {
     private var findCycleIndex: Int = 0
     private var lastFindGroup: Int = -1
 
+    /// Maximum number of find-targets per color group. Prioritises the
+    /// largest clusters so the finder highlights meaningful regions first
+    /// and skips tiny specks that are tedious to hunt for.
+    private static let maxFinderTargets = 15
+
     /// Finds the next unfilled cluster for the selected group and publishes
-    /// its bounds so the canvas can zoom to it. Cycles through clusters on
-    /// repeated taps.
+    /// its bounds so the canvas can zoom to it. Cycles through the largest
+    /// clusters on repeated taps, capped at `maxFinderTargets`.
     func findNextUnfilled() {
         if selectedGroupIndex != lastFindGroup {
             findCycleIndex = 0
             lastFindGroup = selectedGroupIndex
         }
 
-        let unfilledClusters = document.clusters.filter { cluster in
-            cluster.groupIndex == selectedGroupIndex &&
-            cluster.elementIndices.contains(where: { !filledElements.contains($0) })
-        }
+        let unfilledClusters = document.clusters
+            .filter { cluster in
+                cluster.groupIndex == selectedGroupIndex &&
+                cluster.elementIndices.contains(where: { !filledElements.contains($0) })
+            }
+            .sorted { $0.bounds.width * $0.bounds.height > $1.bounds.width * $1.bounds.height }
+            .prefix(Self.maxFinderTargets)
 
         guard !unfilledClusters.isEmpty else { return }
 
@@ -388,11 +388,13 @@ final class ColoringStore: ObservableObject {
             autoCompleteEnabled = false
             return
         }
+        guard selectedGroupIndex < document.groups.count else { return }
         let group = document.groups[selectedGroupIndex]
         if let nextIdx = group.elementIndices.first(where: { !filledElements.contains($0) }) {
             tryFill(elementIndex: nextIdx)
         } else {
             advanceToNextIncompleteGroup()
+            guard selectedGroupIndex < document.groups.count else { return }
             let newGroup = document.groups[selectedGroupIndex]
             if let nextIdx = newGroup.elementIndices.first(where: { !filledElements.contains($0) }) {
                 tryFill(elementIndex: nextIdx)

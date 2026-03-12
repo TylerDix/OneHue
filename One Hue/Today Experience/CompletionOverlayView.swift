@@ -98,8 +98,8 @@ struct CompletionOverlayView: View {
                                 }
                             } label: {
                                 Image(systemName: star <= rating ? "star.fill" : "star")
-                                    .font(.system(size: 22))
-                                    .foregroundStyle(.white.opacity(star <= rating ? 0.9 : 0.3))
+                                    .font(.system(size: 24))
+                                    .foregroundStyle(.white.opacity(star <= rating ? 0.95 : 0.5))
                             }
                             .buttonStyle(.plain)
                         }
@@ -109,12 +109,12 @@ struct CompletionOverlayView: View {
                     if showCommentField {
                         TextField("Any thoughts?", text: $comment)
                             .font(.system(size: 14, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.8))
+                            .foregroundStyle(.white.opacity(0.85))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.white.opacity(0.06))
+                                    .fill(.white.opacity(0.10))
                             )
                             .frame(maxWidth: 280)
                             .transition(.opacity.animation(.easeIn(duration: 0.4)))
@@ -124,11 +124,11 @@ struct CompletionOverlayView: View {
                         } label: {
                             Text("Submit")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.7))
+                                .foregroundStyle(.white.opacity(0.85))
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 8)
                                 .background(
-                                    Capsule().fill(.white.opacity(0.1))
+                                    Capsule().fill(.white.opacity(0.14))
                                 )
                         }
                         .buttonStyle(.plain)
@@ -151,11 +151,12 @@ struct CompletionOverlayView: View {
                     Button(action: onShare) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(.white.opacity(0.7))
                             .padding(10)
-                            .background(Circle().fill(.white.opacity(0.08)))
+                            .background(Circle().fill(.white.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Share artwork")
                     .transition(.opacity.animation(.easeIn(duration: 0.6)))
                 }
 
@@ -167,10 +168,10 @@ struct CompletionOverlayView: View {
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 12, weight: .semibold))
                         }
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.white.opacity(0.75))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(Capsule().fill(.white.opacity(0.08)))
+                        .background(Capsule().fill(.white.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
                     .transition(.opacity.animation(.easeIn(duration: 0.6)))
@@ -180,6 +181,18 @@ struct CompletionOverlayView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.25), location: 0),
+                    .init(color: .black.opacity(0.55), location: 0.45),
+                    .init(color: .black.opacity(0.80), location: 1.0),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
         .onAppear {
             updateCountdown()
             beginReveal()
@@ -245,7 +258,7 @@ struct CompletionOverlayView: View {
 
     private func updateCountdown() {
         var utcCal = Calendar(identifier: .gregorian)
-        utcCal.timeZone = TimeZone(identifier: "UTC")!
+        utcCal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         let now = Date()
         guard let midnight = utcCal.nextDate(after: now, matching: DateComponents(hour: 0, minute: 0, second: 0), matchingPolicy: .nextTime) else {
             countdownText = ""

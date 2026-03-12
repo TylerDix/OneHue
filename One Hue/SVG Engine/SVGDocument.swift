@@ -63,12 +63,18 @@ struct SVGDocument: Identifiable {
     var totalElements: Int { elements.count }
 
     static func empty(id: String) -> SVGDocument {
-        SVGDocument(
+        // Include one sentinel group so groups[0] never crashes
+        let sentinel = SVGColorGroup(
+            id: 0, className: "_empty", color: .gray,
+            hexColor: "#888888", elementIndices: [],
+            centroid: .zero, boundingBox: .zero
+        )
+        return SVGDocument(
             id: id,
             title: "Loading…",
-            viewBox: CGRect(x: 0, y: 0, width: 1792, height: 2400),
+            viewBox: CGRect(x: 0, y: 0, width: 1200, height: 1800),
             elements: [],
-            groups: [],
+            groups: [sentinel],
             completionMessage: "Complete!",
             elementGroupMap: [:],
             clusters: [],
