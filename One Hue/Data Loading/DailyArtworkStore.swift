@@ -198,12 +198,12 @@ final class ColoringStore: ObservableObject {
         filledElements.formUnion(remaining)
     }
 
-    /// When 95%+ of the artwork is filled, sweep any remaining tiny elements
+    /// When 90%+ of the artwork is filled, sweep any remaining tiny elements
     /// across ALL groups. Large unfilled regions stay — only invisible specks vanish.
     private func autoSweepTinyRemnants() {
         let total = document.elements.count
         guard total > 0,
-              Double(filledElements.count) / Double(total) >= 0.95 else { return }
+              Double(filledElements.count) / Double(total) >= 0.90 else { return }
 
         for idx in 0..<total where !filledElements.contains(idx) {
             let el = document.elements[idx]
@@ -217,8 +217,8 @@ final class ColoringStore: ObservableObject {
     private func autoCompleteGlobalIfNearlyDone() {
         let total = document.elements.count
         let remaining = total - filledElements.count
-        // If 3 or fewer elements left, or 99%+ filled, finish the artwork
-        guard remaining > 0, remaining <= 3 || Double(filledElements.count) / Double(total) >= 0.99 else { return }
+        // If 5 or fewer elements left, or 97%+ filled, finish the artwork
+        guard remaining > 0, remaining <= 5 || Double(filledElements.count) / Double(total) >= 0.97 else { return }
         let allIndices = Set(0..<total)
         filledElements.formUnion(allIndices)
     }

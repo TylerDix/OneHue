@@ -159,7 +159,6 @@ struct CanvasView: View {
                             return
                         }
                     }
-                    // Exact hit missed or wrong color — snap to nearest selected-color element
                     let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
                     if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
                         blobOrigin = svg

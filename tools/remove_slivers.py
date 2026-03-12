@@ -133,12 +133,15 @@ def is_sliver(bbox, threshold, area_threshold):
     return False
 
 
-def is_horizontal_band(bbox, vb_width, min_width_frac=0.30, max_height=25, min_aspect=10):
+def is_horizontal_band(bbox, vb_width, vb_height=None,
+                        min_width_frac=0.15, max_height=50, min_aspect=4):
     """
     Determine if an element is a horizontal band artifact (interior or edge).
 
     Bands are thin horizontal strips spanning a significant portion of the
     viewport width with a high aspect ratio. Common Image Trace artifact.
+    Relaxed thresholds to catch the thin transition strips that frustrate users
+    (too thin to tap comfortably, too wide to trigger tiny-neighbor auto-fill).
     """
     if bbox is None:
         return False
@@ -151,6 +154,27 @@ def is_horizontal_band(bbox, vb_width, min_width_frac=0.30, max_height=25, min_a
     if h > max_height:
         return False
     if w / h < min_aspect:
+        return False
+    return True
+
+
+def is_vertical_band(bbox, vb_height, min_height_frac=0.15, max_width=50, min_aspect=4):
+    """
+    Determine if an element is a vertical band artifact.
+
+    Mirror of is_horizontal_band for tall, thin vertical strips.
+    """
+    if bbox is None:
+        return False
+
+    x, y, w, h = bbox
+    if w <= 0:
+        w = 0.001
+    if h < vb_height * min_height_frac:
+        return False
+    if w > max_width:
+        return False
+    if h / w < min_aspect:
         return False
     return True
 
@@ -198,7 +222,9 @@ def process_svg(filepath, threshold, area_threshold, dry_run):
             reason = "degenerate"
         elif is_sliver(bbox, threshold, area_threshold):
             reason = "sliver"
-        elif is_horizontal_band(bbox, vb_width):
+        elif is_horizontal_band(bbox, vb_width, vb_height):
+            reason = "band"
+        elif is_vertical_band(bbox, vb_height):
             reason = "band"
 
         if reason:
