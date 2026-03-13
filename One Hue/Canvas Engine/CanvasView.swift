@@ -26,9 +26,8 @@ struct CanvasView: View {
     @State private var viewportSize: CGSize = .zero
     @State private var currentRenderSize: CGSize = .zero
 
-    // Paint-lock state
-    @State private var isLocked: Bool = false
-    @State private var cursorPosition: CGPoint? = nil
+    // Tap-fill state: ensures only one fill per gesture
+    @State private var didFillThisGesture: Bool = false
 
     // Phase animation
     @State private var showNumbers: Bool = true
@@ -42,7 +41,6 @@ struct CanvasView: View {
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
-    private let cursorSize: CGFloat = 48
 
     private var contentOverflows: Bool {
         guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
@@ -77,15 +75,6 @@ struct CanvasView: View {
             .gesture(paintGesture(viewportSize: geo.size, renderSize: renderSize))
             .simultaneousGesture(zoomGesture)
             .simultaneousGesture(panGesture)
-            .overlay {
-                if let pos = cursorPosition, isLocked {
-                    Circle()
-                        .stroke(.white.opacity(0.7), lineWidth: 1.5)
-                        .frame(width: cursorSize, height: cursorSize)
-                        .position(x: pos.x, y: pos.y)
-                        .allowsHitTesting(false)
-                }
-            }
             .onAppear {
                 viewportSize = geo.size
                 currentRenderSize = renderSize
@@ -135,7 +124,6 @@ struct CanvasView: View {
 
         case .complete:
             withAnimation(.easeOut(duration: 1.0)) { showNumbers = false }
-            isLocked = false
         }
     }
 
@@ -147,34 +135,21 @@ struct CanvasView: View {
                 let loc = value.location
                 guard store.phase == .painting else { return }
 
-                cursorPosition = loc
-
-                // While locked: paint freely, snapping to selected color
-                if isLocked {
-                    if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
-                        let gIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
-                        if gIdx == store.selectedGroupIndex, !store.filledElements.contains(hit.elementIndex) {
-                            blobOrigin = hit.svgPoint
-                            store.tryFill(elementIndex: hit.elementIndex)
-                            return
-                        }
-                    }
-                    let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
-                    if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
-                        blobOrigin = svg
-                        store.tryFill(elementIndex: snapIdx)
-                    }
+                // Already filled a cell this gesture — treat remainder as pan
+                if didFillThisGesture {
+                    let dist = hypot(value.translation.width, value.translation.height)
+                    if dist > 6 { panIfNeeded(value: value) }
                     return
                 }
 
-                // First touch: decide paint or pan
+                // Try exact hit
                 if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
                     let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
                     let isCorrect = groupIdx == store.selectedGroupIndex
                     let needsFill = !store.filledElements.contains(hit.elementIndex)
 
                     if isCorrect && needsFill {
-                        isLocked = true
+                        didFillThisGesture = true
                         blobOrigin = hit.svgPoint
                         store.tryFill(elementIndex: hit.elementIndex)
                         return
@@ -184,7 +159,7 @@ struct CanvasView: View {
                 // Exact hit missed or wrong color — try color snap
                 let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
                 if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
-                    isLocked = true
+                    didFillThisGesture = true
                     blobOrigin = svg
                     store.tryFill(elementIndex: snapIdx)
                     return
@@ -196,8 +171,7 @@ struct CanvasView: View {
             }
             .onEnded { _ in
                 guard store.phase == .painting else { return }
-                isLocked = false
-                cursorPosition = nil
+                didFillThisGesture = false
                 lastOffset = offset
                 clampOffset()
             }
@@ -406,14 +380,13 @@ struct CanvasView: View {
     private var panGesture: some Gesture {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
-                guard !isLocked, contentOverflows else { return }
+                guard contentOverflows else { return }
                 offset = CGSize(
                     width:  lastOffset.width  + value.translation.width,
                     height: lastOffset.height + value.translation.height
                 )
             }
             .onEnded { _ in
-                guard !isLocked else { return }
                 lastOffset = offset
                 clampOffset()
             }
@@ -467,7 +440,6 @@ struct CanvasView: View {
 
     /// Slowly drifts back to center — called after the completion freeze.
     private func slowDriftToCenter() {
-        cursorPosition = nil
         withAnimation(.easeInOut(duration: 1.5)) {
             currentZoom = 1.0; lastZoom = 1.0
             offset = .zero; lastOffset = .zero
@@ -749,6 +721,12 @@ struct SVGCanvasRenderer: View {
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
                     let naturalSize = min(dim * 0.35, 60)
 
+                    // Non-selected tiny clusters: hide label to reduce clutter.
+                    // Labels appear when the user selects that color group.
+                    // Threshold relaxes as artwork fills so remaining pieces stay findable.
+                    let hideThresh: CGFloat = 14 - CGFloat(progressRamp) * 6  // 14 → 8
+                    if !isSelected && naturalSize < hideThresh { continue }
+
                     // Readable minimum ramps up as artwork fills so tiny
                     // remaining clusters become visible.
                     let otherMin: CGFloat = 10 + CGFloat(progressRamp) * 6  // 10 → 16
@@ -838,9 +816,10 @@ struct SVGCanvasRenderer: View {
                          saturation: Double(s * 0.35),
                          brightness: Double(baseBrightness * 0.45))
         } else {
+            // Dimmed further so the selected color's regions pop
             return Color(hue: Double(h),
-                         saturation: Double(s * 0.2),
-                         brightness: Double(baseBrightness * 0.3))
+                         saturation: Double(s * 0.1),
+                         brightness: Double(baseBrightness * 0.22))
         }
     }
 }

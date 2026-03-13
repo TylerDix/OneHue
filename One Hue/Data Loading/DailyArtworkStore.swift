@@ -79,6 +79,7 @@ final class ColoringStore: ObservableObject {
         self.document = doc
         self.spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         self.filledElements = Self.loadProgress(for: doc.id)
+        self.selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
 
         if filledElements.count >= doc.totalElements && doc.totalElements > 0 {
             phase = .complete
@@ -103,8 +104,8 @@ final class ColoringStore: ObservableObject {
         currentArtworkIndex = index
         document = doc
         spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
-        selectedGroupIndex = 0
         filledElements = Self.loadProgress(for: doc.id)
+        selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
         phase = (filledElements.count >= doc.totalElements && doc.totalElements > 0) ? .complete : .painting
     }
 
@@ -167,10 +168,10 @@ final class ColoringStore: ObservableObject {
 
         // Auto-advance to next incomplete group
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
+            mediumHaptic.impactOccurred()
             advanceToNextIncompleteGroup()
         }
 
-        // lightHaptic.impactOccurred()
         return .filled
     }
 
@@ -184,6 +185,24 @@ final class ColoringStore: ObservableObject {
                 return
             }
         }
+    }
+
+    /// Returns the group index with the most unfilled elements — puts the
+    /// largest paintable area on the brush so the user can start immediately.
+    private static func largestIncompleteGroup(
+        in groups: [SVGColorGroup], filled: Set<Int>
+    ) -> Int {
+        var bestIdx = 0
+        var bestCount = 0
+        for (i, group) in groups.enumerated() {
+            let unfilled = group.elementIndices.count
+                - group.elementIndices.filter { filled.contains($0) }.count
+            if unfilled > bestCount {
+                bestCount = unfilled
+                bestIdx = i
+            }
+        }
+        return bestIdx
     }
 
     // MARK: - Auto-Complete Near-Done Groups

@@ -237,6 +237,18 @@ final class SVGParser: NSObject, XMLParserDelegate {
             groupCounter += 1
         }
 
+        // Merge near-duplicate color groups so users don't have to
+        // distinguish colors like #5E8D48 vs #5E8E49 in the palette.
+        groups = Self.mergeNearColors(groups: groups, elements: elements)
+
+        // Rebuild elementGroupMap after merge
+        elementGroupMap.removeAll()
+        for (gi, group) in groups.enumerated() {
+            for idx in group.elementIndices {
+                elementGroupMap[idx] = gi
+            }
+        }
+
         // Build clusters of adjacent same-group elements
         let (clusters, elementClusterMap) = Self.buildClusters(
             elements: elements, groups: groups
@@ -484,6 +496,106 @@ final class SVGParser: NSObject, XMLParserDelegate {
         }
 
         return false
+    }
+
+    // MARK: - Color Merging
+
+    /// Merge color groups whose hex values are perceptually near-identical.
+    /// Uses Euclidean RGB distance; threshold of 25 catches pairs like
+    /// #5E8D48 vs #5E8E49 (dist 1.4) without over-merging distinct hues.
+    private static func mergeNearColors(
+        groups: [SVGColorGroup],
+        elements: [SVGElement]
+    ) -> [SVGColorGroup] {
+        guard groups.count > 1 else { return groups }
+
+        // Parse hex → RGB for each group
+        struct RGB { let r: Double; let g: Double; let b: Double }
+        func parseHex(_ hex: String) -> RGB {
+            let h = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+            guard h.count >= 6,
+                  let r = UInt8(h[h.startIndex..<h.index(h.startIndex, offsetBy: 2)], radix: 16),
+                  let g = UInt8(h[h.index(h.startIndex, offsetBy: 2)..<h.index(h.startIndex, offsetBy: 4)], radix: 16),
+                  let b = UInt8(h[h.index(h.startIndex, offsetBy: 4)..<h.index(h.startIndex, offsetBy: 6)], radix: 16)
+            else { return RGB(r: 128, g: 128, b: 128) }
+            return RGB(r: Double(r), g: Double(g), b: Double(b))
+        }
+
+        func colorDist(_ a: RGB, _ b: RGB) -> Double {
+            let dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b
+            return (dr * dr + dg * dg + db * db).squareRoot()
+        }
+
+        let threshold: Double = 25
+
+        // Union-find to merge groups
+        var parent = Array(0..<groups.count)
+        func find(_ x: Int) -> Int {
+            var root = x
+            while parent[root] != root { root = parent[root] }
+            var curr = x
+            while curr != root { let next = parent[curr]; parent[curr] = root; curr = next }
+            return root
+        }
+        func union(_ a: Int, _ b: Int) {
+            let ra = find(a), rb = find(b)
+            if ra != rb { parent[ra] = rb }
+        }
+
+        let rgbs = groups.map { parseHex($0.hexColor) }
+        for i in 0..<groups.count {
+            for j in (i + 1)..<groups.count {
+                if colorDist(rgbs[i], rgbs[j]) < threshold {
+                    union(i, j)
+                }
+            }
+        }
+
+        // Collect merged components
+        var components: [Int: [Int]] = [:]
+        for i in 0..<groups.count {
+            components[find(i), default: []].append(i)
+        }
+
+        // Build merged groups, keeping the color of the component with most elements
+        var merged: [SVGColorGroup] = []
+        var newId = 0
+        for (_, memberIndices) in components.sorted(by: { $0.value.first! < $1.value.first! }) {
+            // Pick representative: the group with the most elements
+            let rep = memberIndices.max(by: { groups[$0].elementIndices.count < groups[$1].elementIndices.count })!
+
+            // Combine all element indices
+            var allIndices: [Int] = []
+            for mi in memberIndices {
+                allIndices.append(contentsOf: groups[mi].elementIndices)
+            }
+
+            // Recompute centroid and bounding box
+            var sumX: CGFloat = 0, sumY: CGFloat = 0
+            var unionRect: CGRect = .null
+            for idx in allIndices {
+                sumX += elements[idx].centroid.x
+                sumY += elements[idx].centroid.y
+                unionRect = unionRect.union(elements[idx].bounds)
+            }
+            let count = CGFloat(allIndices.count)
+            let centroid = count > 0
+                ? CGPoint(x: sumX / count, y: sumY / count)
+                : .zero
+
+            merged.append(SVGColorGroup(
+                id: newId,
+                className: groups[rep].className,
+                color: groups[rep].color,
+                hexColor: groups[rep].hexColor,
+                elementIndices: allIndices,
+                centroid: centroid,
+                boundingBox: unionRect
+            ))
+            newId += 1
+        }
+
+        return merged
     }
 
     // MARK: - Class / Color Resolution
