@@ -28,7 +28,7 @@ final class ColoringStore: ObservableObject {
     private var undoStack: [Set<Int>] = []
     private static let maxUndoDepth = 30
 
-    var canUndo: Bool { !undoStack.isEmpty && phase == .painting }
+    var canUndo: Bool { !undoStack.isEmpty && phase == .painting && finishTimer == nil }
 
     // MARK: - Haptics (pre-prepared for snappy response)
 
@@ -91,7 +91,10 @@ final class ColoringStore: ObservableObject {
     func loadArtwork(at index: Int) {
         persistNow() // flush before switching
         autoCompleteEnabled = false
+        finishTimer?.invalidate(); finishTimer = nil; finishQueue.removeAll()
+        completionPending = false
         undoStack.removeAll()
+        findUsesRemaining = Self.maxFindsPerGame
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
         let artwork = catalog[index]
@@ -119,6 +122,7 @@ final class ColoringStore: ObservableObject {
 
     @discardableResult
     func tryFill(elementIndex: Int) -> FillResult {
+        guard finishTimer == nil else { return .alreadyFilled } // finishing cascade in progress
         guard elementIndex >= 0, elementIndex < document.elements.count else { return .wrongGroup }
         guard !filledElements.contains(elementIndex) else { return .alreadyFilled }
 
@@ -166,7 +170,7 @@ final class ColoringStore: ObservableObject {
             advanceToNextIncompleteGroup()
         }
 
-        lightHaptic.impactOccurred()
+        // lightHaptic.impactOccurred()
         return .filled
     }
 
@@ -201,11 +205,11 @@ final class ColoringStore: ObservableObject {
     /// When 90%+ of the artwork is filled, sweep any remaining tiny elements
     /// across ALL groups. Large unfilled regions stay — only invisible specks vanish.
     private func autoSweepTinyRemnants() {
-        let total = document.elements.count
+        let total = document.totalElements
         guard total > 0,
               Double(filledElements.count) / Double(total) >= 0.90 else { return }
 
-        for idx in 0..<total where !filledElements.contains(idx) {
+        for idx in document.groupedIndices where !filledElements.contains(idx) {
             let el = document.elements[idx]
             if min(el.bounds.width, el.bounds.height) < Self.tinyThreshold {
                 filledElements.insert(idx)
@@ -213,14 +217,47 @@ final class ColoringStore: ObservableObject {
         }
     }
 
-    /// When the overall artwork has very few elements remaining, auto-fill them all.
+    /// When the overall artwork has very few elements remaining, begin a gentle
+    /// staggered fill so the last pieces land one-by-one instead of snapping.
     private func autoCompleteGlobalIfNearlyDone() {
-        let total = document.elements.count
+        let total = document.totalElements
         let remaining = total - filledElements.count
-        // If 5 or fewer elements left, or 97%+ filled, finish the artwork
         guard remaining > 0, remaining <= 5 || Double(filledElements.count) / Double(total) >= 0.97 else { return }
-        let allIndices = Set(0..<total)
-        filledElements.formUnion(allIndices)
+
+        // Already running a staggered finish — don't restart
+        guard finishTimer == nil else { return }
+
+        let leftover = document.groupedIndices.subtracting(filledElements)
+        guard !leftover.isEmpty else { return }
+        startFinishingFill(indices: Array(leftover))
+    }
+
+    // MARK: - Staggered Finishing Fill
+
+    private var finishTimer: Timer?
+    private var finishQueue: [Int] = []
+
+    /// Fills remaining elements one-by-one with a short delay between each,
+    /// so the artwork completes with a gentle cascade instead of a hard snap.
+    private func startFinishingFill(indices: [Int]) {
+        // Shuffle for a natural scattered feel, then drain via timer
+        finishQueue = indices.shuffled()
+        // Interval scales with count: fast for few, leisurely for many
+        let interval = min(0.12, max(0.04, 0.6 / Double(finishQueue.count)))
+        finishTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in self.drainFinishQueue() }
+        }
+    }
+
+    private func drainFinishQueue() {
+        guard !finishQueue.isEmpty else {
+            finishTimer?.invalidate()
+            finishTimer = nil
+            return
+        }
+        let idx = finishQueue.removeFirst()
+        filledElements.insert(idx)
     }
 
     // MARK: - Auto-Fill Tiny Neighbors
@@ -269,11 +306,14 @@ final class ColoringStore: ObservableObject {
             }
         }
 
-        lightHaptic.impactOccurred()
+        // lightHaptic.impactOccurred()
     }
 
     func resetProgress() {
+        finishTimer?.invalidate(); finishTimer = nil; finishQueue.removeAll()
+        completionPending = false
         undoStack.removeAll()
+        findUsesRemaining = Self.maxFindsPerGame
         filledElements = []
         phase = .painting
         Self.clearProgress(for: document.id)
@@ -293,15 +333,21 @@ final class ColoringStore: ObservableObject {
     private var findCycleIndex: Int = 0
     private var lastFindGroup: Int = -1
 
+    /// Total find-clicks allowed per artwork before the scope button hides.
+    private static let maxFindsPerGame = 10
+    @Published private(set) var findUsesRemaining: Int = maxFindsPerGame
+
     /// Maximum number of find-targets per color group. Prioritises the
     /// largest clusters so the finder highlights meaningful regions first
     /// and skips tiny specks that are tedious to hunt for.
-    private static let maxFinderTargets = 15
+    private static let maxFinderTargets = 10
 
     /// Finds the next unfilled cluster for the selected group and publishes
     /// its bounds so the canvas can zoom to it. Cycles through the largest
     /// clusters on repeated taps, capped at `maxFinderTargets`.
     func findNextUnfilled() {
+        guard findUsesRemaining > 0 else { return }
+
         if selectedGroupIndex != lastFindGroup {
             findCycleIndex = 0
             lastFindGroup = selectedGroupIndex
@@ -326,29 +372,31 @@ final class ColoringStore: ObservableObject {
 
         findTargetBounds = target.bounds
         findTargetToken &+= 1
+        findUsesRemaining -= 1
     }
 
     // MARK: - Completion
 
+    private var completionPending = false
+
     private func checkCompletion() {
-        guard isComplete, phase != .complete else { return }
+        guard isComplete, phase != .complete, !completionPending else { return }
 
-        // Soft double-tap haptic
-        mediumHaptic.impactOccurred()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            self?.lightHaptic.impactOccurred()
+        // Let the user see the final filled state for a breath before transitioning
+        completionPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.isComplete, self.phase != .complete else { return }
+            withAnimation(.easeOut(duration: 0.6)) { self.phase = .complete }
+            UserDefaults.standard.set(true, forKey: "onehue.completed.\(self.currentArtwork.id)")
+            Task { await CompletionService.shared.reportCompletion(artworkID: self.currentArtwork.id) }
         }
-
-        withAnimation { phase = .complete }
-        UserDefaults.standard.set(true, forKey: "onehue.completed.\(currentArtwork.id)")
-        Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
     }
 
     // MARK: - Debug
 
     func debugForceComplete() {
         autoCompleteEnabled = false
-        filledElements = Set(0..<document.elements.count)
+        filledElements = document.groupedIndices
         phase = .complete
         Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
     }
@@ -357,7 +405,7 @@ final class ColoringStore: ObservableObject {
     /// manually tap the last few and test the completion experience.
     func debugNearlyComplete() {
         autoCompleteEnabled = false
-        var allIndices = Set(0..<document.elements.count)
+        var allIndices = document.groupedIndices
 
         // Keep a few unfilled cells from the last group that has elements
         let keep = 5

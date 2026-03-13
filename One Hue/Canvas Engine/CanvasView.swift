@@ -264,7 +264,7 @@ struct CanvasView: View {
             // pill-backed labels are as easy to tap as they look.
             let dim = min(cluster.bounds.width, cluster.bounds.height)
             let isSelectedCluster = cluster.groupIndex == store.selectedGroupIndex
-            let fontSize = max(min(dim * 0.35, 60), isSelectedCluster ? 18 : 8)
+            let fontSize = max(min(dim * 0.35, 60), isSelectedCluster ? 18 : 10)
             let hitRadius = max(fontSize * 1.0, 24)
 
             if dist < hitRadius, dist < bestLabelDist {
@@ -619,7 +619,12 @@ struct SVGCanvasRenderer: View {
             for element in document.elements {
                 let isFilled = filledElements.contains(element.id)
                 guard let groupIdx = document.elementGroupMap[element.id],
-                      groupIdx < document.groups.count else { continue }
+                      groupIdx < document.groups.count else {
+                    // Ungrouped element (border sliver): render as white, no interaction
+                    let path = Path(element.path)
+                    ctx.fill(path, with: .color(.white))
+                    continue
+                }
                 let group = document.groups[groupIdx]
                 let path = Path(element.path)
 
@@ -702,16 +707,25 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 3: Number labels — one per cluster, graduated opacity on zoom
-            // Uses overlap detection to prevent stacking.
+            // Pass 3: Number labels — one per cluster, graduated opacity on zoom.
+            // As the artwork fills up, non-selected labels become progressively
+            // brighter and persist at higher zoom so remaining pieces are findable.
             if showNumbers {
                 let minVisible: CGFloat = 5
                 let fullVisible: CGFloat = 14
 
-                // Non-selected labels fade out between 2× and 3.5× zoom
-                let fadeStart: CGFloat = 2.0
-                let fadeEnd: CGFloat = 3.5
+                // Progress ramp: 0 at ≤50% filled, 1 at 90%+ filled
+                let totalEl = document.totalElements
+                let progress = totalEl > 0 ? Double(filledElements.count) / Double(totalEl) : 0
+                let progressRamp = min(max((progress - 0.5) / 0.4, 0), 1)
+
+                // Non-selected labels fade out on zoom — delay fades as artwork fills
+                let fadeStart: CGFloat = 2.0 + CGFloat(progressRamp) * 3.0   // 2× → 5×
+                let fadeEnd: CGFloat   = 3.5 + CGFloat(progressRamp) * 4.5   // 3.5× → 8×
                 let otherGroupFade = 1.0 - min(max((zoomLevel - fadeStart) / (fadeEnd - fadeStart), 0), 1)
+
+                // Non-selected alpha ramps from 0.65 → 0.9 as artwork fills
+                let otherBaseAlpha = 0.65 + progressRamp * 0.25
 
                 // Collect labels sorted by cluster area (largest first → priority)
                 struct LabelInfo {
@@ -735,18 +749,18 @@ struct SVGCanvasRenderer: View {
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
                     let naturalSize = min(dim * 0.35, 60)
 
-                    // Selected-group labels get a readable minimum so tiny
-                    // clusters aren't invisible — a pill background makes
-                    // the oversized label stand out.
-                    let boostedMin: CGFloat = isSelected ? 18 : 4
+                    // Readable minimum ramps up as artwork fills so tiny
+                    // remaining clusters become visible.
+                    let otherMin: CGFloat = 10 + CGFloat(progressRamp) * 6  // 10 → 16
+                    let boostedMin: CGFloat = isSelected ? 18 : otherMin
                     let fontSize = max(naturalSize, boostedMin)
-                    let needsPill = isSelected && naturalSize < boostedMin
+                    let needsPill = naturalSize < boostedMin
 
                     let screenPt = fontSize * scale * zoomLevel
                     guard screenPt >= minVisible else { continue }
 
                     let sizeAlpha = min((screenPt - minVisible) / (fullVisible - minVisible), 1.0)
-                    let baseAlpha: Double = isSelected ? 0.9 : 0.45 * otherGroupFade
+                    let baseAlpha: Double = isSelected ? 0.9 : otherBaseAlpha * otherGroupFade
                     let area = cluster.bounds.width * cluster.bounds.height
 
                     let groupNumber = cluster.groupIndex < document.groups.count

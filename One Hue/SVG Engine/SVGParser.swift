@@ -181,16 +181,30 @@ final class SVGParser: NSObject, XMLParserDelegate {
             }
         }
 
-        // Build groups
+        // Build groups — include all colors (even white).
+        // Only skip individual near-white elements that are border slivers
+        // (thin bands at the viewBox edge from Image Trace artifacts).
         var groups: [SVGColorGroup] = []
         var elementGroupMap: [Int: Int] = [:]
+        var groupCounter = 0
 
-        for (groupIdx, className) in seenClasses.enumerated() {
-            let indices = elements.enumerated()
+        for className in seenClasses {
+            let hex = styleColors[className] ?? "#888888"
+            let isWhitish = Self.isNearWhite(hex)
+
+            var indices = elements.enumerated()
                 .filter { $0.element.className == className }
                 .map { $0.offset }
 
-            let hex = styleColors[className] ?? "#888888"
+            // For near-white classes, drop border slivers but keep interior regions
+            if isWhitish {
+                indices = indices.filter { idx in
+                    !Self.isBorderSliver(elements[idx].bounds, viewBox: viewBox)
+                }
+            }
+
+            guard !indices.isEmpty else { continue }
+
             let color = Color(hex: hex)
 
             // Compute group centroid (average of element centroids)
@@ -207,7 +221,7 @@ final class SVGParser: NSObject, XMLParserDelegate {
                 : CGPoint.zero
 
             groups.append(SVGColorGroup(
-                id: groupIdx,
+                id: groupCounter,
                 className: className,
                 color: color,
                 hexColor: hex,
@@ -217,8 +231,10 @@ final class SVGParser: NSObject, XMLParserDelegate {
             ))
 
             for idx in indices {
-                elementGroupMap[idx] = groupIdx
+                elementGroupMap[idx] = groupCounter
             }
+
+            groupCounter += 1
         }
 
         // Build clusters of adjacent same-group elements
@@ -433,6 +449,41 @@ final class SVGParser: NSObject, XMLParserDelegate {
             let hexColor = String(css[colorRange])
             styleColors[className] = hexColor
         }
+    }
+
+    /// Returns true for hex colors that are near-white (all RGB ≥ 240).
+    private static func isNearWhite(_ hex: String) -> Bool {
+        let h = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard h.count >= 6 else { return false }
+        let ri = h.index(h.startIndex, offsetBy: 2)
+        let gi = h.index(ri, offsetBy: 2)
+        guard let r = UInt8(h[h.startIndex..<ri], radix: 16),
+              let g = UInt8(h[ri..<gi], radix: 16),
+              let b = UInt8(h[gi..<h.index(gi, offsetBy: 2)], radix: 16) else { return false }
+        return r >= 240 && g >= 240 && b >= 240
+    }
+
+    /// A border sliver is a near-white element that spans most of the viewBox
+    /// width or height but is very thin — these are Image Trace border artifacts.
+    private static func isBorderSliver(_ bounds: CGRect, viewBox: CGRect) -> Bool {
+        let vw = viewBox.width, vh = viewBox.height
+        guard vw > 0, vh > 0 else { return false }
+
+        let widthRatio  = bounds.width / vw
+        let heightRatio = bounds.height / vh
+
+        // Thin horizontal band: spans >60% of width but <3% of height
+        if widthRatio > 0.6 && heightRatio < 0.03 { return true }
+        // Thin vertical band: spans >60% of height but <3% of width
+        if heightRatio > 0.6 && widthRatio < 0.03 { return true }
+
+        // Element mostly outside the viewBox (edge overhang from Image Trace)
+        let inside = bounds.intersection(viewBox)
+        if inside.isNull || (inside.width * inside.height) / max(bounds.width * bounds.height, 1) < 0.1 {
+            return true
+        }
+
+        return false
     }
 
     // MARK: - Class / Color Resolution

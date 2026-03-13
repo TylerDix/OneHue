@@ -27,17 +27,28 @@ struct TodayView: View {
                 CanvasView(store: store)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
-                        if store.phase == .painting && hasUnfilledInSelectedGroup {
+                        if store.phase == .painting && hasUnfilledInSelectedGroup && store.findUsesRemaining > 0 {
                             Button { store.findNextUnfilled() } label: {
-                                Image(systemName: "scope")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .padding(12)
-                                    .background(Circle().fill(.black.opacity(0.35)))
-                                    .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "scope")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(12)
+                                        .background(Circle().fill(.black.opacity(0.35)))
+                                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+
+                                    if store.findUsesRemaining <= 3 {
+                                        Text("\(store.findUsesRemaining)")
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 18, height: 18)
+                                            .background(Circle().fill(.red.opacity(0.85)))
+                                            .offset(x: 4, y: -4)
+                                    }
+                                }
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Find next unfilled region")
+                            .accessibilityLabel("Find next unfilled region, \(store.findUsesRemaining) uses remaining")
                             .padding(16)
                             .transition(.opacity)
                         }
@@ -50,8 +61,7 @@ struct TodayView: View {
                 PaletteView(
                     groups: store.document.groups,
                     selectedIndex: $store.selectedGroupIndex,
-                    filledElements: store.filledElements,
-                    isComplete: store.isComplete
+                    filledElements: store.filledElements
                 )
                 .padding(.top, 8)
                 .padding(.bottom, 12)

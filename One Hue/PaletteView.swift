@@ -8,7 +8,6 @@ struct PaletteView: View {
     let groups: [SVGColorGroup]
     @Binding var selectedIndex: Int
     let filledElements: Set<Int>
-    let isComplete: Bool
 
     @State private var hasAppeared = false
 
@@ -20,7 +19,7 @@ struct PaletteView: View {
                         let remaining = remainingCount(for: group)
                         let total = group.elementIndices.count
 
-                        if remaining > 0 && !isComplete {
+                        if remaining > 0 {
                             swatchButton(
                                 group: group,
                                 remaining: remaining,
@@ -136,8 +135,7 @@ struct PaletteView: View {
     return PaletteView(
         groups: store.document.groups,
         selectedIndex: .constant(0),
-        filledElements: store.filledElements,
-        isComplete: false
+        filledElements: store.filledElements
     )
     .padding()
     .background(Color.black)

@@ -60,7 +60,11 @@ struct SVGDocument: Identifiable {
         return viewBox.width / viewBox.height
     }
 
-    var totalElements: Int { elements.count }
+    /// Only counts elements that belong to a color group (excludes near-white background).
+    var totalElements: Int { elementGroupMap.count }
+
+    /// All element indices that belong to a color group.
+    var groupedIndices: Set<Int> { Set(elementGroupMap.keys) }
 
     static func empty(id: String) -> SVGDocument {
         // Include one sentinel group so groups[0] never crashes
