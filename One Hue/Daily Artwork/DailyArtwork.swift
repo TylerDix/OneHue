@@ -14,7 +14,7 @@ extension Artwork {
 
     // MARK: - Curated Calendar
 
-    /// 127 artworks ordered chronologically (Jan → Dec).
+    /// 146 artworks ordered chronologically (Jan → Dec).
     /// Each artwork anchors to a specific (month, day) and remains the
     /// daily artwork until the next entry's date arrives.
     /// Placement reflects seasonal imagery, cultural resonance, and the
@@ -29,8 +29,11 @@ extension Artwork {
         Artwork(id: "snowCabin",          fileName: "snowCabin",          displayName: "Snow Cabin",             completionMessage: "The deepest snow falls quietest around the places that glow.",                month: 1,  day: 10),
         Artwork(id: "cozyCabin",          fileName: "cozyCabin",          displayName: "Cozy Cabin",             completionMessage: "The warmest rooms are the ones that expect nothing.",                          month: 1,  day: 13),
         Artwork(id: "frozenLake",         fileName: "frozenLake",         displayName: "Frozen Lake",            completionMessage: "Stillness is just the lake remembering what it was before the wind.",          month: 1,  day: 16),
+        Artwork(id: "arcticFoxSnow",      fileName: "arcticFoxSnow",      displayName: "Arctic Fox in Snow",     completionMessage: "The fox sleeps deepest where the snow erases all paths.",                       month: 1,  day: 18),
         Artwork(id: "owl",                fileName: "owl",                displayName: "Owl",                    completionMessage: "Wisdom is just patience that learned to sit in the dark.",                     month: 1,  day: 20),
+        Artwork(id: "iceFishingLake",     fileName: "iceFishingLake",     displayName: "Ice Fishing Lake",       completionMessage: "Patience has a hut and a hole in the ice.",                                    month: 1,  day: 22),
         Artwork(id: "fjord",              fileName: "fjord",              displayName: "Norwegian Fjord",        completionMessage: "The cliffs don't lean in. They've simply forgotten how to move apart.",        month: 1,  day: 24),
+        Artwork(id: "wolfHowling",        fileName: "wolfHowling",        displayName: "Wolf Howling",           completionMessage: "The howl doesn't ask for an answer. It just fills the silence.",               month: 1,  day: 26),
         Artwork(id: "walrus",             fileName: "walrus",             displayName: "Walrus",                 completionMessage: "Weight is its own kind of grace when you stop apologizing for it.",            month: 1,  day: 28),
 
         // ── February — Winter continues, introspection ──────────────
@@ -42,7 +45,9 @@ extension Artwork {
         Artwork(id: "sleepyFox",          fileName: "sleepyFox",          displayName: "Sleepy Fox",             completionMessage: "Rest is the bravest thing a wild thing can do.",                               month: 2,  day: 13),
         Artwork(id: "hotSpring",          fileName: "hotSpring",          displayName: "Hot Spring",             completionMessage: "The earth offers warmth to anyone willing to sit with the cold.",              month: 2,  day: 16),
         Artwork(id: "stoneWatermill",     fileName: "stoneWatermill",     displayName: "Stone Watermill",        completionMessage: "The wheel turns because the water never stops giving.",                        month: 2,  day: 19),
+        Artwork(id: "polarBearCub",      fileName: "polarBearCub",       displayName: "Polar Bear and Cub",    completionMessage: "The smallest footprints follow the biggest ones through the snow.",            month: 2,  day: 21),
         Artwork(id: "stormLighthouse",    fileName: "stormLighthouse",    displayName: "Storm Lighthouse",       completionMessage: "Standing alone in the storm isn't courage. It's just knowing you're needed.", month: 2,  day: 23),
+        Artwork(id: "frozenWaterfallBlue",fileName: "frozenWaterfallBlue",displayName: "Frozen Waterfall",       completionMessage: "Even the waterfall rests when winter asks it to.",                              month: 2,  day: 25),
         Artwork(id: "blueMountain",       fileName: "blueMountain",       displayName: "Blue Mountain",          completionMessage: "Distance is just the mountain's way of staying mysterious.",                   month: 2,  day: 27),
 
         // ── March — Thaw, awakening ─────────────────────────────────
@@ -56,6 +61,7 @@ extension Artwork {
         Artwork(id: "cherryBlossom",      fileName: "cherryBlossom",      displayName: "Cherry Blossoms",        completionMessage: "Beauty that stays forever would forget how to be beautiful.",                  month: 3,  day: 16),
         Artwork(id: "wisteriaFlowers",    fileName: "wisteriaFlowers",    displayName: "Wisteria",               completionMessage: "The heaviest blooms hang from the thinnest branches.",                         month: 3,  day: 18),
         Artwork(id: "wisteriaArbor",      fileName: "wisteriaArbor",      displayName: "Wisteria Arbor",         completionMessage: "Some things grow best when they have something to lean on.",                   month: 3,  day: 20),
+        Artwork(id: "iceCave",            fileName: "iceCave",            displayName: "Ice Cave",               completionMessage: "The light finds a way in, even through something frozen solid.",               month: 3,  day: 21),
         Artwork(id: "porcupine",          fileName: "porcupine",          displayName: "Porcupine",              completionMessage: "The softest hearts build the sharpest defenses.",                              month: 3,  day: 23),
         Artwork(id: "redwoodCathedral",   fileName: "redwoodCathedral",   displayName: "Redwood Cathedral",      completionMessage: "The oldest trees hold the light without grasping.",                            month: 3,  day: 26),
         Artwork(id: "zenGarden",          fileName: "zenGarden",          displayName: "Zen Garden",             completionMessage: "The rake marks disappear. That's the whole lesson.",                           month: 3,  day: 29),
@@ -72,6 +78,7 @@ extension Artwork {
         Artwork(id: "harborLowTide",      fileName: "harborLowTide",      displayName: "Harbor at Low Tide",     completionMessage: "The tide always returns for what it left behind.",                              month: 4,  day: 22),
         Artwork(id: "bambooForestPath",   fileName: "bambooForestPath",   displayName: "Bamboo Forest",          completionMessage: "The tallest stalks grow by not looking at their neighbors.",                    month: 4,  day: 24),
         Artwork(id: "lavendarFields",     fileName: "lavendarFields",     displayName: "Lavender Fields",        completionMessage: "The wind carries the scent further than the eye can see.",                     month: 4,  day: 25),
+        Artwork(id: "gardenGateRoses",   fileName: "gardenGateRoses",    displayName: "Garden Gate",            completionMessage: "The gate is open because the roses already decided who belongs.",              month: 4,  day: 27),
         Artwork(id: "windmill",           fileName: "windmill",           displayName: "Windmill",               completionMessage: "It turns because it was built to face the wind, not hide from it.",            month: 4,  day: 29),
 
         // ── May — Late spring, renewal ──────────────────────────────
@@ -81,6 +88,7 @@ extension Artwork {
         Artwork(id: "dragonFly",          fileName: "dragonFly",          displayName: "Dragonfly",              completionMessage: "Four wings and it still chooses to hover.",                                    month: 5,  day: 7),
         Artwork(id: "seaCave",            fileName: "seaCave",            displayName: "Sea Cave",               completionMessage: "Standing at the edge is how you learn what's behind you.",                     month: 5,  day: 10),
         Artwork(id: "elephantFamily",     fileName: "elephantFamily",     displayName: "Elephant Family",        completionMessage: "The youngest walks in the middle. That's how you know it's love.",             month: 5,  day: 13),
+        Artwork(id: "wildflowerMeadow",  fileName: "wildflowerMeadow",   displayName: "Wildflower Meadow",     completionMessage: "The meadow doesn't plan its colors. It just opens everything at once.",        month: 5,  day: 15),
         Artwork(id: "provenceLavender",   fileName: "provenceLavender",   displayName: "Provence Lavender",      completionMessage: "The fields don't rush to bloom. They just agree on a color.",                  month: 5,  day: 17),
         Artwork(id: "redBridge",          fileName: "redBridge",          displayName: "Red Bridge",             completionMessage: "The brightest color is the one that doesn't apologize.",                       month: 5,  day: 20),
         Artwork(id: "canopyWalkway",      fileName: "canopyWalkway",      displayName: "Canopy Walkway",         completionMessage: "The highest paths belong to those who trust what holds them.",                  month: 5,  day: 23),
@@ -108,6 +116,7 @@ extension Artwork {
         Artwork(id: "jungleWaterfall",    fileName: "jungleWaterfall",    displayName: "Jungle Waterfall",       completionMessage: "The water doesn't choose the cliff. It just refuses to stop.",                month: 7,  day: 7),
         Artwork(id: "tropicalWaterfall",  fileName: "tropicalWaterfall",  displayName: "Tropical Waterfall",     completionMessage: "The water falls without deciding where it will land.",                         month: 7,  day: 10),
         Artwork(id: "coralReef",          fileName: "coralReef",          displayName: "Coral Reef",             completionMessage: "A thousand small lives build the architecture no one planned.",                month: 7,  day: 13),
+        Artwork(id: "tidePools",          fileName: "tidePools",          displayName: "Tide Pools",             completionMessage: "The ocean leaves its brightest secrets in the smallest hollows.",              month: 7,  day: 15),
         Artwork(id: "pinkFlamingo",       fileName: "pinkFlamingo",       displayName: "Flamingo",               completionMessage: "Standing on one leg is easy when you've forgotten the other exists.",          month: 7,  day: 17),
         Artwork(id: "junglePool",         fileName: "junglePool",         displayName: "Jungle Pool",            completionMessage: "The jungle hides its calmest places behind the loudest green.",                month: 7,  day: 20),
         Artwork(id: "desertOasis",        fileName: "desertOasis",        displayName: "Desert Oasis",           completionMessage: "The palms drink deep because they know the sand offers nothing twice.",        month: 7,  day: 22),
@@ -126,6 +135,7 @@ extension Artwork {
         Artwork(id: "pelicanColorful",    fileName: "pelicanColorful",    displayName: "Pelican",                completionMessage: "The biggest catch fits in the smallest moment of patience.",                   month: 8,  day: 19),
         Artwork(id: "alpineMeadow",       fileName: "alpineMeadow",       displayName: "Alpine Meadow",          completionMessage: "The wildflowers bloom without knowing anyone is watching.",                     month: 8,  day: 21),
         Artwork(id: "desertMesa",         fileName: "desertMesa",         displayName: "Desert Mesa",            completionMessage: "The mesa stands because erosion forgot to take everything.",                   month: 8,  day: 23),
+        Artwork(id: "grizzlySalmon",     fileName: "grizzlySalmon",      displayName: "Grizzly Bear Fishing",  completionMessage: "The river gives to whoever stands still long enough.",                          month: 8,  day: 25),
         Artwork(id: "pingFlamingo",       fileName: "pingFlamingo",       displayName: "Flamingo Pair",          completionMessage: "Pink is just confidence wearing feathers.",                                    month: 8,  day: 26),
         Artwork(id: "jelly",              fileName: "jelly",              displayName: "Jellyfish",              completionMessage: "Drifting is a decision the current made for both of you.",                     month: 8,  day: 29),
 
@@ -135,6 +145,7 @@ extension Artwork {
         Artwork(id: "coastalTidePools",   fileName: "coastalTidePools",   displayName: "Coastal Tide Pools",     completionMessage: "The ocean leaves small gifts in every hollow it finds.",                        month: 9,  day: 3),
         Artwork(id: "coastalCliffs",      fileName: "coastalCliffs",      displayName: "Coastal Cliffs",         completionMessage: "The lighthouse asks nothing of the ships. It just stays lit.",                 month: 9,  day: 5),
         Artwork(id: "eagleSouring",       fileName: "eagleSouring",       displayName: "Soaring Eagle",          completionMessage: "The wind does the lifting. The wings do the trusting.",                        month: 9,  day: 7),
+        Artwork(id: "pandaBamboo",       fileName: "pandaBamboo",        displayName: "Panda in Bamboo",       completionMessage: "The bamboo grows around the panda, or maybe it's the other way.",              month: 9,  day: 9),
         Artwork(id: "observatory",        fileName: "observatory",        displayName: "Observatory",            completionMessage: "The dome opens for anyone willing to stay up past the stars.",                 month: 9,  day: 10),
         Artwork(id: "parrot",             fileName: "parrot",             displayName: "Parrot",                 completionMessage: "The brightest voice in the forest has nothing to prove.",                      month: 9,  day: 13),
         Artwork(id: "twoParrots",         fileName: "twoParrots",         displayName: "Two Parrots",            completionMessage: "Conversation is just color with a heartbeat.",                                month: 9,  day: 16),
@@ -150,12 +161,14 @@ extension Artwork {
         Artwork(id: "autumnOrchard",      fileName: "autumnOrchard",      displayName: "Autumn Orchard",         completionMessage: "The tree gives its fruit to whatever hand shows up in autumn.",                month: 10, day: 4),
         Artwork(id: "mountainGoat",       fileName: "mountainGoat",       displayName: "Mountain Goat",          completionMessage: "The ledge was never as narrow as it looked from below.",                       month: 10, day: 7),
         Artwork(id: "gazelleSavanna",     fileName: "gazelleSavanna",     displayName: "Gazelle",                completionMessage: "Grace is just fear that learned how to leap.",                                 month: 10, day: 9),
+        Artwork(id: "autumnBarn",        fileName: "autumnBarn",          displayName: "Autumn Barn",           completionMessage: "The barn holds the harvest like a promise it made to the field.",               month: 10, day: 10),
         Artwork(id: "redCoveredBridge",   fileName: "redCoveredBridge",   displayName: "Red Covered Bridge",     completionMessage: "The bridge wears red so you never lose your way home.",                        month: 10, day: 12),
         Artwork(id: "bison",              fileName: "bison",              displayName: "Bison",                  completionMessage: "The prairie parts for what refuses to go around.",                             month: 10, day: 15),
         Artwork(id: "tigerStalking",      fileName: "tigerStalking",      displayName: "Tiger",                  completionMessage: "Stripes are just the jungle remembering where the light fell.",               month: 10, day: 18),
         Artwork(id: "scottishHighlands",  fileName: "scottishHighlands",  displayName: "Scottish Highlands",     completionMessage: "The ruins stay because the stone has nowhere else to be.",                     month: 10, day: 21),
         Artwork(id: "purpleMoose",        fileName: "purpleMoose",        displayName: "Purple Moose",           completionMessage: "Some colors exist only because someone imagined them.",                        month: 10, day: 24),
         Artwork(id: "autumnBench",        fileName: "autumnBench",        displayName: "Autumn Bench",           completionMessage: "The bench waits for no one, yet holds a place for everyone.",                  month: 10, day: 27),
+        Artwork(id: "autumnForestPath",  fileName: "autumnForestPath",   displayName: "Autumn Forest Path",    completionMessage: "The path doesn't end. It just changes what it's covered with.",                month: 10, day: 29),
         Artwork(id: "birdFish",           fileName: "birdFish",           displayName: "Bird and Fish",          completionMessage: "They meet where the water ends and the air begins.",                          month: 10, day: 30),
 
         // ── November — Deep autumn, earth and warmth ────────────────
@@ -168,6 +181,7 @@ extension Artwork {
         Artwork(id: "terracedVineyard",   fileName: "terracedVineyard",   displayName: "Terraced Vineyard",      completionMessage: "The hill was too steep until someone decided to build steps for grapes.",      month: 11, day: 16),
         Artwork(id: "alpacas",            fileName: "alpacas",            displayName: "Alpacas",                completionMessage: "The softest wool comes from the most patient animals.",                        month: 11, day: 19),
         Artwork(id: "stoneArchBridge",    fileName: "stoneArchBridge",    displayName: "Stone Arch Bridge",      completionMessage: "The arch holds because every stone leans on its neighbor.",                    month: 11, day: 22),
+        Artwork(id: "ravensBirch",       fileName: "ravensBirch",        displayName: "Ravens on Birch",       completionMessage: "Two dark shapes on white bark — winter's own calligraphy.",                    month: 11, day: 24),
         Artwork(id: "racoonLake",         fileName: "racoonLake",         displayName: "Raccoon at the Lake",    completionMessage: "Curiosity washes everything twice, just to be sure.",                          month: 11, day: 26),
         Artwork(id: "chameleo",           fileName: "chameleo",           displayName: "Chameleon",              completionMessage: "Changing color isn't hiding. It's listening to the room.",                     month: 11, day: 29),
 
@@ -177,11 +191,16 @@ extension Artwork {
         Artwork(id: "harborRowboats",     fileName: "harborRowboats",     displayName: "Harbor Rowboats",        completionMessage: "The boats rest together because the harbor holds them all the same.",          month: 12, day: 3),
         Artwork(id: "snowyVillage",       fileName: "snowyVillage",       displayName: "Snowy Village",          completionMessage: "The village glows brightest when the snow asks it to.",                        month: 12, day: 5),
         Artwork(id: "peacockBlue",        fileName: "peacockBlue",        displayName: "Peacock",                completionMessage: "The display isn't for you. It's for the one who sees it anyway.",              month: 12, day: 8),
+        Artwork(id: "wolfMoonlight",     fileName: "wolfMoonlight",      displayName: "Wolf in Moonlight",     completionMessage: "The moon doesn't answer. That's why the wolf keeps asking.",                   month: 12, day: 9),
         Artwork(id: "libraryRoom",        fileName: "libraryRoom",        displayName: "Library Room",           completionMessage: "Every unread book is a conversation waiting to begin.",                        month: 12, day: 11),
+        Artwork(id: "frozenWaterfall",   fileName: "frozenWaterfall",    displayName: "Frozen Cascade",        completionMessage: "The water remembers how to fall, even when it's standing still.",              month: 12, day: 13),
         Artwork(id: "firefliesGlowing",   fileName: "firefliesGlowing",   displayName: "Fireflies",              completionMessage: "A thousand small lights outshine anything that tries to burn alone.",          month: 12, day: 15),
+        Artwork(id: "auroraBorealis",    fileName: "auroraBorealis",     displayName: "Aurora Borealis",       completionMessage: "The sky dances when it thinks no one is watching.",                             month: 12, day: 17),
         Artwork(id: "carouselHourse",     fileName: "carouselHourse",     displayName: "Carousel Horse",         completionMessage: "It goes in circles and still makes children believe in journeys.",             month: 12, day: 19),
         Artwork(id: "wineCellar",         fileName: "wineCellar",         displayName: "Wine Cellar",            completionMessage: "Patience tastes better in the dark.",                                         month: 12, day: 22),
+        Artwork(id: "winterSleigh",      fileName: "winterSleigh",       displayName: "Winter Sleigh",         completionMessage: "The lantern swings because the path ahead is worth lighting.",                 month: 12, day: 24),
         Artwork(id: "weirdBird",          fileName: "weirdBird",          displayName: "Strange Bird",           completionMessage: "The ones who don't quite fit are the ones you remember.",                     month: 12, day: 26),
+        Artwork(id: "winterMarket",      fileName: "winterMarket",       displayName: "Winter Market",         completionMessage: "The warmest nights are the ones spent outdoors with strangers.",               month: 12, day: 28),
         Artwork(id: "stoneArchCove",      fileName: "stoneArchCove",      displayName: "Stone Arch Cove",        completionMessage: "Stand small before something ancient. That's where perspective begins.",      month: 12, day: 30),
     ]
 
