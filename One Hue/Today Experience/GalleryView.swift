@@ -106,9 +106,9 @@ private struct GalleryCell: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 0) {
-                // Thumbnail — fixed 3:4 portrait container
+                // Thumbnail — portrait container matching cropped viewBox ratio
                 Color.black
-                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                    .aspectRatio(1200.0 / 1541.0, contentMode: .fit)
                     .overlay {
                         if let doc = document {
                             SVGCanvasRenderer(

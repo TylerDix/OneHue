@@ -227,8 +227,8 @@ struct CanvasView: View {
         let svgOffsetX = (renderSize.width - vb.width * scale) / 2
         let svgOffsetY = (renderSize.height - vb.height * scale) / 2
 
-        return CGPoint(x: (canvasX - svgOffsetX) / scale,
-                       y: (canvasY - svgOffsetY) / scale)
+        return CGPoint(x: (canvasX - svgOffsetX) / scale + vb.origin.x,
+                       y: (canvasY - svgOffsetY) / scale + vb.origin.y)
     }
 
     private func screenToElement(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> (elementIndex: Int, svgPoint: CGPoint)? {
@@ -527,8 +527,8 @@ struct CanvasView: View {
         let targetZoom = min(max(fitZoom, 3.0), maxZoom)
 
         // Offset to center the cluster
-        let canvasX = svgRect.midX * scale + svgOffsetX
-        let canvasY = svgRect.midY * scale + svgOffsetY
+        let canvasX = (svgRect.midX - vb.origin.x) * scale + svgOffsetX
+        let canvasY = (svgRect.midY - vb.origin.y) * scale + svgOffsetY
         let dx = canvasX - renderSize.width / 2
         let dy = canvasY - renderSize.height / 2
 
@@ -600,6 +600,7 @@ struct SVGCanvasRenderer: View {
             let adjOffsetY = (size.height - vb.height * adjScale) / 2
             ctx.translateBy(x: adjOffsetX, y: adjOffsetY)
             ctx.scaleBy(x: adjScale, y: adjScale)
+            ctx.translateBy(x: -vb.origin.x, y: -vb.origin.y)
 
             let now = Date()
 
