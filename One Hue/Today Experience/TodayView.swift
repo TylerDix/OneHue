@@ -16,8 +16,14 @@ struct TodayView: View {
     // Feature tooltips — shown once ever if the user hasn't discovered the feature
     @AppStorage("onehue.tip.peek") private var peekTipShown = false
     @AppStorage("onehue.tip.find") private var findTipShown = false
+    @AppStorage("onehue.tip.palette") private var paletteTipShown = false
     @State private var showPeekTip = false
     @State private var showFindTip = false
+    @State private var showPaletteTip = false
+
+    // "Stuck" hint — nudges the scope button when few pieces remain and user is idle
+    @State private var showStuckHint = false
+    @State private var stuckTimer: Timer?
 
     var body: some View {
         ZStack {
@@ -39,7 +45,7 @@ struct TodayView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
                         if store.phase == .painting && hasUnfilledInSelectedGroup && store.findUsesRemaining > 0 {
-                            Button { dismissTips(); store.findNextUnfilled() } label: {
+                            Button { dismissTips(); showStuckHint = false; store.findNextUnfilled() } label: {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "scope")
                                         .font(.system(size: 18, weight: .bold))
@@ -61,7 +67,11 @@ struct TodayView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("Find next unfilled region, \(store.findUsesRemaining) uses remaining")
                             .overlay(alignment: .leading) {
-                                if showFindTip {
+                                if showStuckHint {
+                                    FeatureTip(text: "Stuck? Tap to find it")
+                                        .offset(x: -170)
+                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                } else if showFindTip {
                                     FeatureTip(text: "Find hidden regions")
                                         .offset(x: -160)
                                         .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -76,18 +86,31 @@ struct TodayView: View {
 
                 // Palette — swatches animate away on completion but
                 // the container stays so the canvas doesn't jump.
-                PaletteView(
-                    groups: store.document.groups,
-                    selectedIndex: $store.selectedGroupIndex,
-                    filledElements: store.filledElements,
-                    justCompletedGroupIndex: store.justCompletedGroupIndex
-                )
+                ZStack(alignment: .top) {
+                    PaletteView(
+                        groups: store.document.groups,
+                        selectedIndex: $store.selectedGroupIndex,
+                        filledElements: store.filledElements,
+                        justCompletedGroupIndex: store.justCompletedGroupIndex,
+                        onRetap: { store.pulseTrigger &+= 1 }
+                    )
+
+                    if showPaletteTip {
+                        FeatureTip(text: "Tap a color to highlight its pieces")
+                            .offset(y: -28)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                }
                 .padding(.top, 8)
                 .padding(.bottom, 12)
             }
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
-                    if phase == .complete { beginCompletionSequence() }
+                    if phase == .complete {
+                        stuckTimer?.invalidate(); stuckTimer = nil
+                        showStuckHint = false
+                        beginCompletionSequence()
+                    }
                     if phase == .painting { resetCompletionSequence() }
                 }
             }
@@ -165,6 +188,22 @@ struct TodayView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                     withAnimation(.easeOut(duration: 0.3)) { showFindTip = false }
                     findTipShown = true
+                }
+            }
+            // Stuck hint: reset on any fill, re-arm if few pieces remain
+            withAnimation(.easeOut(duration: 0.2)) { showStuckHint = false }
+            armStuckTimer()
+        }
+        .onChange(of: store.justCompletedGroupIndex) { _, newVal in
+            // Palette tip: after first group completion, hint that tapping a color highlights
+            if !paletteTipShown, newVal != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    guard !paletteTipShown else { return }
+                    withAnimation(.easeOut(duration: 0.4)) { showPaletteTip = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                        withAnimation(.easeOut(duration: 0.3)) { showPaletteTip = false }
+                        paletteTipShown = true
+                    }
                 }
             }
         }
@@ -298,9 +337,11 @@ struct TodayView: View {
         withAnimation(.easeOut(duration: 0.2)) {
             showPeekTip = false
             showFindTip = false
+            showPaletteTip = false
         }
         peekTipShown = true
         findTipShown = true
+        paletteTipShown = true
     }
 
     private var todayDateString: String {
@@ -308,6 +349,28 @@ struct TodayView: View {
         formatter.dateFormat = "MMMM d, yyyy"
         formatter.timeZone = TimeZone(identifier: "UTC")
         return formatter.string(from: Date())
+    }
+
+    /// Arms a timer that shows the "stuck" tooltip on the scope button after
+    /// 8 seconds of inactivity, but only when few pieces remain in the artwork.
+    private func armStuckTimer() {
+        stuckTimer?.invalidate()
+        stuckTimer = nil
+        // Only arm when few pieces remain globally and there are find uses left
+        guard store.phase == .painting,
+              store.globalRemaining > 0,
+              store.globalRemaining <= 5,
+              store.findUsesRemaining > 0 else { return }
+        stuckTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { _ in
+            Task { @MainActor in
+                guard store.phase == .painting, store.globalRemaining > 0 else { return }
+                withAnimation(.easeOut(duration: 0.4)) { showStuckHint = true }
+                // Auto-dismiss after 6s if not acted on
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                    withAnimation(.easeOut(duration: 0.3)) { showStuckHint = false }
+                }
+            }
+        }
     }
 
     private var hasUnfilledInSelectedGroup: Bool {
@@ -371,7 +434,8 @@ struct TodayView: View {
                     isPeeking: false,
                     zoomLevel: 1.0,
                     activeAnimations: [],
-                    flashTick: 0
+                    flashTick: 0,
+                    pulsePhase: 0
                 )
                 .frame(width: canvasWidth, height: canvasHeight)
 

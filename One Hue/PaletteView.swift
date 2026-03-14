@@ -9,6 +9,7 @@ struct PaletteView: View {
     @Binding var selectedIndex: Int
     let filledElements: Set<Int>
     let justCompletedGroupIndex: Int?
+    var onRetap: (() -> Void)? = nil
 
     @State private var hasAppeared = false
 
@@ -37,14 +38,13 @@ struct PaletteView: View {
                             )
                             .transition(.asymmetric(
                                 insertion: .scale.combined(with: .opacity),
-                                removal: .scale(scale: 0.3)
+                                removal: .offset(y: -80)
                                     .combined(with: .opacity)
-                                    .combined(with: .offset(y: -12))
                             ))
                         }
                     }
                 }
-                .animation(.easeInOut(duration: 0.5), value: completedGroupCount)
+                .animation(.easeInOut(duration: 0.6), value: completedGroupCount)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
             }
@@ -81,8 +81,13 @@ struct PaletteView: View {
         let ringColor = Self.lighterTint(hex: group.hexColor)
 
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedIndex = group.id
+            if group.id == selectedIndex {
+                // Re-tap — flash the remaining pieces
+                onRetap?()
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedIndex = group.id
+                }
             }
         } label: {
             ZStack {
@@ -102,8 +107,8 @@ struct PaletteView: View {
                 Circle()
                     .trim(from: 0, to: justCompleted ? 1.0 : progress)
                     .stroke(
-                        ringColor.opacity(justCompleted ? 1.0 : (isSelected ? 1.0 : 0.7)),
-                        style: StrokeStyle(lineWidth: justCompleted ? 4 : 3, lineCap: .round)
+                        ringColor.opacity(isSelected || justCompleted ? 1.0 : 0.7),
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
                     )
                     .frame(width: size + 6, height: size + 6)
                     .rotationEffect(.degrees(-90))
@@ -118,19 +123,10 @@ struct PaletteView: View {
                         .shadow(color: ringColor.opacity(0.4), radius: 5, x: 0, y: 0)
                 }
 
-                // Soft glow on completion
-                if justCompleted {
-                    Circle()
-                        .fill(ringColor.opacity(0.25))
-                        .frame(width: size + 20, height: size + 20)
-                        .blur(radius: 8)
-                        .transition(.opacity)
-                }
-
-                // Completion checkmark
+                // Completion checkmark replaces number, same size
                 if justCompleted {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(labelColor)
                         .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
                         .transition(.scale.combined(with: .opacity))
@@ -147,9 +143,9 @@ struct PaletteView: View {
                         )
                 }
             }
-            .scaleEffect(justCompleted ? 1.2 : (isSelected ? 1.12 : 1.0))
+            .scaleEffect(isSelected && !justCompleted ? 1.12 : 1.0)
             .animation(.easeOut(duration: 0.2), value: isSelected)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: justCompleted)
+            .animation(.easeOut(duration: 0.2), value: justCompleted)
         }
         .buttonStyle(.plain)
         .disabled(justCompleted)

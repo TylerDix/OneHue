@@ -238,7 +238,8 @@ private struct GalleryCell: View {
                                 isPeeking: false,
                                 zoomLevel: 1.0,
                                 activeAnimations: [],
-                                flashTick: 0
+                                flashTick: 0,
+                                pulsePhase: 0
                             )
                             .drawingGroup()
                         }

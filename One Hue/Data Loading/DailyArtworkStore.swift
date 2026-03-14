@@ -14,6 +14,9 @@ final class ColoringStore: ObservableObject {
     @Published private(set) var justCompletedGroupIndex: Int? = nil
     @Published private(set) var isPeeking: Bool = false
     @Published private(set) var peekUsesRemaining: Int = maxPeeksPerGame
+    /// Incremented when the user re-taps an already-selected palette swatch,
+    /// triggering a pulse flash in CanvasView even though selectedGroupIndex didn't change.
+    @Published var pulseTrigger: UInt = 0
     static let maxPeeksPerGame = 3
 
     @Published private(set) var filledElements: Set<Int> = [] {
@@ -55,6 +58,11 @@ final class ColoringStore: ObservableObject {
 
     var progressText: String {
         "\(filledElements.count) / \(document.totalElements)"
+    }
+
+    /// Number of grouped elements still unfilled across the entire artwork.
+    var globalRemaining: Int {
+        document.groupedIndices.subtracting(filledElements).count
     }
 
     var selectedGroup: SVGColorGroup {
@@ -179,10 +187,6 @@ final class ColoringStore: ObservableObject {
         // At 95%+ global, sweep remaining tiny elements across all groups
         autoSweepTinyRemnants()
 
-        // Global auto-complete: if only a handful of elements remain across the
-        // entire artwork, fill them all so users never get stuck on invisible pixels.
-        autoCompleteGlobalIfNearlyDone()
-
         // Auto-advance to next incomplete group
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
@@ -283,12 +287,14 @@ final class ColoringStore: ObservableObject {
         let leftover = document.groupedIndices.subtracting(filledElements)
         guard !leftover.isEmpty else { return }
 
-        // Only auto-complete if every remaining element is tiny
+        // Auto-complete if: all remaining are tiny, OR only 1-2 left (don't
+        // make the user hunt for the very last pieces — just finish it).
+        let fewEnoughToFinish = leftover.count <= 2
         let allTiny = leftover.allSatisfy { idx in
             let el = document.elements[idx]
             return min(el.bounds.width, el.bounds.height) < tinyThreshold
         }
-        guard allTiny else { return }
+        guard fewEnoughToFinish || allTiny else { return }
 
         startFinishingFill(indices: Array(leftover))
     }
