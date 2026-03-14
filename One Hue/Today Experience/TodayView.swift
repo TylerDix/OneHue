@@ -25,8 +25,12 @@ struct TodayView: View {
 
             VStack(spacing: 0) {
 
-                // Header — always visible so settings is accessible
-                header
+                // Header — always visible so settings is accessible.
+                // Uses a clear spacer to reserve its height in the VStack;
+                // the actual header is overlaid in the ZStack above the
+                // completion overlay so it stays tappable.
+                Color.clear
+                    .frame(height: 0)
                     .padding(.top, 8)
                     .padding(.bottom, 12)
 
@@ -100,6 +104,14 @@ struct TodayView: View {
                     skipReveal: skipReveal
                 )
                 .transition(.opacity)
+            }
+
+            // Header — above completion overlay so buttons stay tappable
+            VStack {
+                header
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+                Spacer()
             }
 
             // First-run onboarding

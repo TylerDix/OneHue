@@ -234,8 +234,19 @@ final class ColoringStore: ObservableObject {
 
     // MARK: - Auto-Complete Near-Done Groups
 
-    /// Auto-complete threshold: 100% — user must fill every cell.
-    private var autoCompleteThreshold: Double { 1.0 }
+    /// Complexity-scaled threshold: simpler artworks require higher fill %
+    /// before auto-complete kicks in, so users get to finish them by hand.
+    ///   ≤50 elements  → 100% (never auto-completes)
+    ///   51–100        → 97%
+    ///   101–200       → 95%
+    ///   201+          → 90% (original behavior)
+    private var autoCompleteThreshold: Double {
+        let total = document.totalElements
+        if total <= 50  { return 1.0 }
+        if total <= 100 { return 0.97 }
+        if total <= 200 { return 0.95 }
+        return 0.90
+    }
 
     private func autoCompleteIfNearlyDone(_ group: SVGColorGroup) {
         let total = group.elementIndices.count
@@ -248,11 +259,36 @@ final class ColoringStore: ObservableObject {
         filledElements.formUnion(remaining)
     }
 
-    /// Sweep tiny remnants — disabled while testing 100% completion.
-    private func autoSweepTinyRemnants() {}
+    /// Sweep tiny remnants only on complex artworks (>50 elements).
+    private func autoSweepTinyRemnants() {
+        let total = document.totalElements
+        guard total > 50,
+              Double(filledElements.count) / Double(total) >= autoCompleteThreshold else { return }
 
-    /// Global auto-complete — disabled while testing 100% completion.
-    private func autoCompleteGlobalIfNearlyDone() {}
+        for idx in document.groupedIndices where !filledElements.contains(idx) {
+            let el = document.elements[idx]
+            if min(el.bounds.width, el.bounds.height) < tinyThreshold {
+                filledElements.insert(idx)
+            }
+        }
+    }
+
+    /// When the overall artwork has very few elements remaining, begin a gentle
+    /// staggered fill. Scaled by complexity — simple artworks need ≤2 remaining.
+    private func autoCompleteGlobalIfNearlyDone() {
+        let total = document.totalElements
+        let remaining = total - filledElements.count
+        let maxLeftover = total <= 50 ? 2 : (total <= 100 ? 3 : 5)
+        let globalThreshold = total <= 100 ? 0.99 : 0.97
+        guard remaining > 0, remaining <= maxLeftover || Double(filledElements.count) / Double(total) >= globalThreshold else { return }
+
+        // Already running a staggered finish — don't restart
+        guard finishTimer == nil else { return }
+
+        let leftover = document.groupedIndices.subtracting(filledElements)
+        guard !leftover.isEmpty else { return }
+        startFinishingFill(indices: Array(leftover))
+    }
 
     // MARK: - Staggered Finishing Fill
 
