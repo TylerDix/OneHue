@@ -269,7 +269,7 @@ struct CanvasView: View {
         let searchRect = CGRect(x: svgX - margin, y: svgY - margin,
                                 width: margin * 2, height: margin * 2)
 
-        let tinyThresh = ColoringStore.tinyThreshold
+        let tinyThresh = ColoringStore.tinyThresholdMax
         var bestIdx: Int?
         var bestDist: CGFloat = .greatestFiniteMagnitude
         var bestNonTinyIdx: Int?

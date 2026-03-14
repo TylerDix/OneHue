@@ -119,6 +119,21 @@ final class ColoringStore: ObservableObject {
         loadArtwork(at: (currentArtworkIndex + 1) % Artwork.catalog.count)
     }
 
+    /// Advances to the next incomplete artwork, wrapping around. Falls back to
+    /// plain `nextArtwork()` if every artwork is already completed.
+    func nextIncompleteArtwork() {
+        let count = Artwork.catalog.count
+        for offset in 1..<count {
+            let idx = (currentArtworkIndex + offset) % count
+            if !Self.isArtworkCompleted(Artwork.catalog[idx].id) {
+                loadArtwork(at: idx)
+                return
+            }
+        }
+        // Everything completed — just advance one
+        nextArtwork()
+    }
+
     func previousArtwork() {
         loadArtwork(at: (currentArtworkIndex - 1 + Artwork.catalog.count) % Artwork.catalog.count)
     }
@@ -219,8 +234,8 @@ final class ColoringStore: ObservableObject {
 
     // MARK: - Auto-Complete Near-Done Groups
 
-    /// When a group reaches this fraction filled, auto-fill the rest.
-    private let autoCompleteThreshold: Double = 0.90
+    /// Auto-complete threshold: 100% — user must fill every cell.
+    private var autoCompleteThreshold: Double { 1.0 }
 
     private func autoCompleteIfNearlyDone(_ group: SVGColorGroup) {
         let total = group.elementIndices.count
@@ -233,35 +248,11 @@ final class ColoringStore: ObservableObject {
         filledElements.formUnion(remaining)
     }
 
-    /// When 90%+ of the artwork is filled, sweep any remaining tiny elements
-    /// across ALL groups. Large unfilled regions stay — only invisible specks vanish.
-    private func autoSweepTinyRemnants() {
-        let total = document.totalElements
-        guard total > 0,
-              Double(filledElements.count) / Double(total) >= 0.90 else { return }
+    /// Sweep tiny remnants — disabled while testing 100% completion.
+    private func autoSweepTinyRemnants() {}
 
-        for idx in document.groupedIndices where !filledElements.contains(idx) {
-            let el = document.elements[idx]
-            if min(el.bounds.width, el.bounds.height) < Self.tinyThreshold {
-                filledElements.insert(idx)
-            }
-        }
-    }
-
-    /// When the overall artwork has very few elements remaining, begin a gentle
-    /// staggered fill so the last pieces land one-by-one instead of snapping.
-    private func autoCompleteGlobalIfNearlyDone() {
-        let total = document.totalElements
-        let remaining = total - filledElements.count
-        guard remaining > 0, remaining <= 5 || Double(filledElements.count) / Double(total) >= 0.97 else { return }
-
-        // Already running a staggered finish — don't restart
-        guard finishTimer == nil else { return }
-
-        let leftover = document.groupedIndices.subtracting(filledElements)
-        guard !leftover.isEmpty else { return }
-        startFinishingFill(indices: Array(leftover))
-    }
+    /// Global auto-complete — disabled while testing 100% completion.
+    private func autoCompleteGlobalIfNearlyDone() {}
 
     // MARK: - Staggered Finishing Fill
 
@@ -293,10 +284,24 @@ final class ColoringStore: ObservableObject {
 
     // MARK: - Auto-Fill Tiny Neighbors
 
-    /// SVG-unit threshold: elements with min(width, height) below this are "tiny"
-    static let tinyThreshold: CGFloat = 90
+    /// SVG-unit threshold: elements with min(width, height) below this are "tiny".
+    /// Scaled by artwork complexity so easy artworks don't auto-grab too many cells.
+    static let tinyThresholdMax: CGFloat = 90
+    private var tinyThreshold: CGFloat {
+        let total = document.totalElements
+        if total <= 50  { return 25 }
+        if total <= 100 { return 45 }
+        if total <= 200 { return 65 }
+        return Self.tinyThresholdMax
+    }
     /// How far (SVG units) to look for adjacent tiny elements
-    private let neighborMargin: CGFloat = 45
+    private var neighborMargin: CGFloat {
+        let total = document.totalElements
+        if total <= 50  { return 10 }
+        if total <= 100 { return 20 }
+        if total <= 200 { return 30 }
+        return 45
+    }
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group
     /// elements and add them to `toFill`. Uses spatial hash for O(nearby) lookup
@@ -314,7 +319,7 @@ final class ColoringStore: ObservableObject {
                 guard groupElements.contains(idx) else { continue }
                 guard !filledElements.contains(idx), !toFill.contains(idx) else { continue }
                 let el = document.elements[idx]
-                guard min(el.bounds.width, el.bounds.height) < Self.tinyThreshold else { continue }
+                guard min(el.bounds.width, el.bounds.height) < tinyThreshold else { continue }
                 guard zone.intersects(el.bounds) else { continue }
                 toFill.insert(idx)
                 queue.append(idx)
@@ -361,6 +366,7 @@ final class ColoringStore: ObservableObject {
         filledElements = []
         phase = .painting
         Self.clearProgress(for: document.id)
+        UserDefaults.standard.removeObject(forKey: "onehue.completed.\(currentArtwork.id)")
     }
 
     /// Incremented to tell CanvasView to slowly drift back to center.
@@ -378,7 +384,7 @@ final class ColoringStore: ObservableObject {
     private var lastFindGroup: Int = -1
 
     /// Total find-clicks allowed per artwork before the scope button hides.
-    static let maxFindsPerGame = 10
+    static let maxFindsPerGame = 4
     @Published private(set) var findUsesRemaining: Int = maxFindsPerGame
 
     /// Maximum number of find-targets per color group. Prioritises the

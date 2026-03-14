@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 import UserNotifications
 
@@ -32,6 +33,13 @@ struct SettingsView: View {
                         if enabled { requestAndScheduleReminder() }
                         else { cancelReminder() }
                     }
+                }
+
+                // 2. Tip Jar
+                Section {
+                    TipJarSection()
+                } header: {
+                    Text("Support One Hue")
                 }
 
                 // 3. About
@@ -228,6 +236,77 @@ struct AboutView: View {
             .foregroundStyle(.white.opacity(0.7))
             .lineSpacing(4)
             .multilineTextAlignment(.center)
+    }
+}
+
+// MARK: - Tip Jar
+
+private struct TipJarSection: View {
+    @StateObject private var tipJar = TipJarManager.shared
+
+    var body: some View {
+        if tipJar.purchaseState == .thankYou {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Thank you!")
+                        .fontWeight(.medium)
+                    Text("Your support means the world.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.pink.opacity(0.8))
+            }
+            .transition(.opacity)
+        } else if tipJar.products.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+        } else {
+            ForEach(tipJar.products) { product in
+                Button {
+                    Task { await tipJar.purchase(product) }
+                } label: {
+                    Label {
+                        HStack {
+                            Text(tipLabel(for: product))
+                            Spacer()
+                            Text(product.displayPrice)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: tipIcon(for: product))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                .disabled(tipJar.purchaseState == .purchasing)
+            }
+
+            if case .failed(let msg) = tipJar.purchaseState {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(.red.opacity(0.7))
+            }
+        }
+    }
+
+    private func tipLabel(for product: Product) -> String {
+        switch product.id {
+        case "com.dix.OneHue.tip.small":  return "Small Tip"
+        case "com.dix.OneHue.tip.medium": return "Medium Tip"
+        case "com.dix.OneHue.tip.large":  return "Large Tip"
+        default: return product.displayName
+        }
+    }
+
+    private func tipIcon(for product: Product) -> String {
+        switch product.id {
+        case "com.dix.OneHue.tip.small":  return "cup.and.saucer"
+        case "com.dix.OneHue.tip.medium": return "heart"
+        case "com.dix.OneHue.tip.large":  return "heart.fill"
+        default: return "heart"
+        }
     }
 }
 

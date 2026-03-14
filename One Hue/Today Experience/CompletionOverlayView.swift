@@ -9,22 +9,22 @@ struct CompletionOverlayView: View {
     let message: String
     let artworkID: String
     @ObservedObject var completionService: CompletionService
-    var onShare: (() -> Void)? = nil
     var onNext: (() -> Void)? = nil
+    var onGallery: (() -> Void)? = nil
+    var isTodayArtwork: Bool = false
+    /// Skip the staged reveal and show everything immediately (e.g. cold launch
+    /// with an already-completed artwork).
+    var skipReveal: Bool = false
 
-    // Staged reveal
+    // Staged reveal — gentle cascade top → bottom
     @State private var showMessage = false
     @State private var showCount = false
     @State private var showCountdown = false
-    @State private var showShareButton = false
     @State private var showFeedback = false
     @State private var showNextButton = false
 
     // Feedback state
-    @State private var rating: Int = 0
-    @State private var comment: String = ""
     @State private var feedbackSubmitted = false
-    @State private var showCommentField = false
 
     // Live countdown
     @State private var countdownText = ""
@@ -34,23 +34,33 @@ struct CompletionOverlayView: View {
         UserDefaults.standard.integer(forKey: "onehue.rated.\(artworkID)") > 0
     }
 
+    // MARK: - Transition
+
+    /// Unified fade-and-rise: every element enters the same way — gentle,
+    /// cohesive, no visual competition between different motion types.
+    private static let fadeRise: AnyTransition = .asymmetric(
+        insertion: .opacity.combined(with: .offset(y: 14)),
+        removal: .opacity
+    )
+
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
 
+            // Quote card
             if showMessage {
                 VStack(spacing: 14) {
-                    Text(message)
+                    Text(Self.preventOrphan(message))
                         .font(.system(size: 21, weight: .light, design: .serif))
                         .foregroundStyle(.white.opacity(0.9))
                         .multilineTextAlignment(.center)
                         .lineSpacing(5)
 
-                    if showCount, let count = completionService.globalCount, count > 0 {
+                    if showCount, isTodayArtwork, let count = completionService.globalCount, count > 0 {
                         Text(countText(count))
                             .font(.system(size: 14, weight: .regular, design: .rounded))
                             .foregroundStyle(.white.opacity(0.45))
-                            .transition(.opacity.animation(.easeIn(duration: 0.8)))
+                            .transition(.opacity.animation(.easeOut(duration: 0.8)))
                     }
                 }
                 .padding(.horizontal, 24)
@@ -64,9 +74,10 @@ struct CompletionOverlayView: View {
                                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
                         )
                 )
-                .transition(.opacity.animation(.easeIn(duration: 0.8)))
+                .transition(Self.fadeRise)
             }
 
+            // Countdown pill
             if showCountdown {
                 Text(countdownText)
                     .font(.system(size: 13, weight: .regular, design: .rounded))
@@ -82,85 +93,60 @@ struct CompletionOverlayView: View {
                                     .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
                             )
                     )
-                    .transition(.opacity.animation(.easeIn(duration: 0.6)))
+                    .transition(Self.fadeRise)
             }
 
-            // Inline feedback
+            // Inline feedback — thumbs up/down
             if showFeedback && !alreadyRated && !feedbackSubmitted {
-                VStack(spacing: 14) {
-                    // Star rating
-                    HStack(spacing: 10) {
-                        ForEach(1...5, id: \.self) { star in
-                            Button {
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    rating = star
-                                    showCommentField = true
-                                }
-                            } label: {
-                                Image(systemName: star <= rating ? "star.fill" : "star")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(.white.opacity(star <= rating ? 0.95 : 0.5))
-                            }
-                            .buttonStyle(.plain)
-                        }
+                HStack(spacing: 20) {
+                    Button { submitRating(5) } label: {
+                        Image(systemName: "hand.thumbsup")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .padding(10)
+                            .background(Circle().fill(.white.opacity(0.08)))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Like this artwork")
 
-                    // Comment field (appears after rating)
-                    if showCommentField {
-                        TextField("Any thoughts?", text: $comment)
-                            .font(.system(size: 14, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.white.opacity(0.10))
-                            )
-                            .frame(maxWidth: 280)
-                            .transition(.opacity.animation(.easeIn(duration: 0.4)))
-
-                        Button {
-                            submitFeedback()
-                        } label: {
-                            Text("Submit")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.85))
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule().fill(.white.opacity(0.14))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .transition(.opacity.animation(.easeIn(duration: 0.3)))
+                    Button { submitRating(1) } label: {
+                        Image(systemName: "hand.thumbsdown")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .padding(10)
+                            .background(Circle().fill(.white.opacity(0.08)))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dislike this artwork")
                 }
-                .transition(.opacity.animation(.easeIn(duration: 0.6)))
+                .transition(Self.fadeRise)
             }
 
             if feedbackSubmitted {
                 Text("Thanks!")
                     .font(.system(size: 14, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.45))
-                    .transition(.opacity.animation(.easeIn(duration: 0.5)))
+                    .transition(Self.fadeRise)
             }
 
             // Action buttons
-            HStack(spacing: 20) {
-                if showShareButton, let onShare {
-                    Button(action: onShare) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(10)
-                            .background(Circle().fill(.white.opacity(0.12)))
+            if showNextButton {
+                if isTodayArtwork, let onGallery {
+                    Button(action: onGallery) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "square.grid.2x2")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("Gallery")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                        }
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(.white.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Share artwork")
-                    .transition(.opacity.animation(.easeIn(duration: 0.6)))
-                }
-
-                if showNextButton, let onNext {
+                    .transition(Self.fadeRise)
+                } else if let onNext {
                     Button(action: onNext) {
                         HStack(spacing: 6) {
                             Text("Next")
@@ -174,7 +160,7 @@ struct CompletionOverlayView: View {
                         .background(Capsule().fill(.white.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
-                    .transition(.opacity.animation(.easeIn(duration: 0.6)))
+                    .transition(Self.fadeRise)
                 }
             }
 
@@ -202,50 +188,72 @@ struct CompletionOverlayView: View {
         }
     }
 
+    // MARK: - Staged Reveal
+
+    /// Gentle cascade: elements arrive top → bottom with the same easeOut curve.
+    /// Total ~3.5s — unhurried, each element gets space to breathe.
     private func beginReveal() {
-        withAnimation(.easeIn(duration: 0.8)) {
+        if skipReveal {
+            showMessage = true
+            showCount = true
+            showCountdown = true
+            showFeedback = true
+            showNextButton = true
+            return
+        }
+
+        // 0.0s — Quote card fades up
+        withAnimation(.easeOut(duration: 0.9)) {
             showMessage = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.easeIn(duration: 0.8)) {
+
+        // 0.8s — Global count fades in beneath the quote
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeOut(duration: 0.7)) {
                 showCount = true
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            withAnimation(.easeIn(duration: 0.6)) {
+
+        // 1.8s — Countdown pill
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            withAnimation(.easeOut(duration: 0.7)) {
                 showCountdown = true
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.8) {
-            withAnimation(.easeIn(duration: 0.6)) {
-                showShareButton = true
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) {
-            withAnimation(.easeIn(duration: 0.6)) {
+
+        // 2.5s — Feedback buttons
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation(.easeOut(duration: 0.6)) {
                 showFeedback = true
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
-            withAnimation(.easeIn(duration: 0.6)) {
+
+        // 3.2s — Action buttons
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            withAnimation(.easeOut(duration: 0.6)) {
                 showNextButton = true
             }
         }
     }
 
-    private func submitFeedback() {
-        guard rating > 0 else { return }
-        UserDefaults.standard.set(rating, forKey: "onehue.rated.\(artworkID)")
-        withAnimation { feedbackSubmitted = true }
+    // MARK: - Actions
+
+    private func submitRating(_ value: Int) {
+        UserDefaults.standard.set(value, forKey: "onehue.rated.\(artworkID)")
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            feedbackSubmitted = true
+        }
 
         Task {
             await CompletionService.shared.submitFeedback(
                 artworkID: artworkID,
-                rating: rating,
-                comment: comment
+                rating: value,
+                comment: ""
             )
         }
     }
+
+    // MARK: - Helpers
 
     private func countText(_ count: Int) -> String {
         if count == 1 {
@@ -254,6 +262,15 @@ struct CompletionOverlayView: View {
             let formatted = count.formatted(.number)
             return "Colored by \(formatted) people today."
         }
+    }
+
+    /// Replaces the last space with a non-breaking space so the final
+    /// two words always wrap together — no orphan words on the last line.
+    private static func preventOrphan(_ text: String) -> String {
+        guard let range = text.range(of: " ", options: .backwards) else { return text }
+        var result = text
+        result.replaceSubrange(range, with: "\u{00A0}")
+        return result
     }
 
     private func updateCountdown() {
@@ -271,11 +288,24 @@ struct CompletionOverlayView: View {
     }
 }
 
-#Preview("Completion") {
+#Preview("Completion — Short") {
     CompletionOverlayView(
         message: "The horizon waits for no one.",
         artworkID: "preview",
-        completionService: CompletionService.shared
+        completionService: CompletionService.shared,
+        onGallery: {},
+        isTodayArtwork: true
+    )
+    .background(.black)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Completion — Long Quote") {
+    CompletionOverlayView(
+        message: "The glass holds summer hostage while winter presses its face against the pane.",
+        artworkID: "preview2",
+        completionService: CompletionService.shared,
+        onNext: {}
     )
     .background(.black)
     .preferredColorScheme(.dark)
