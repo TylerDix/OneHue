@@ -1,0 +1,442 @@
+# One Hue — Firefly Image Generation Prompts
+# 348 unique prompts (82 existing + 283 needed = 365; extras give buffer for rejects)
+#
+# Settings: Firefly Image 4, Portrait (3:4), Art content type
+# Style references: use existing gallery reference images
+#
+# Each line: ID | Subject description (append the template suffix below)
+# TEMPLATE SUFFIX (append to every prompt):
+#   , flat digital illustration, large smooth color blocks, limited color palette,
+#   10 distinct colors, no gradients, no textures, clean shapes, minimal detail,
+#   vector art style, peaceful and serene
+#
+# After generation: save from Firefly, run through Illustrator BatchColorByNumber.jsx,
+# then python3 tools/remove_slivers.py, then white-bar fix, then add to catalog.
+
+# ═══════════════════════════════════════════════════════════════
+# BIRDS (30 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+001 | kingfisherPond | A kingfisher bird perched on a mossy branch above a still forest pond with lily pads and soft water reflections, morning golden light filtering through trees
+002 | eagleMountain | A bald eagle soaring above snow-capped mountain peaks with pine forests below and wispy clouds in a blue sky
+003 | cardinalSnow | A bright red cardinal perched on a snow-covered pine branch with falling snowflakes and a soft gray winter sky
+004 | swanLake | A graceful white swan gliding across a misty lake at dawn with reeds along the shore and a pale pink sky
+005 | peacockGarden | A peacock displaying its full tail feathers in a formal garden with hedges and a stone fountain
+006 | parrotRainforest | A colorful macaw parrot perched on a tropical branch surrounded by large rainforest leaves and exotic flowers
+007 | penguinIceberg | A group of emperor penguins standing on an ice shelf with icebergs and a pale blue Antarctic sky
+008 | craneWetland | A red-crowned crane standing in shallow wetland water with tall grasses and a soft sunrise behind distant mountains
+009 | puffinCliff | A puffin standing on a grassy sea cliff with wildflowers overlooking a calm blue ocean
+010 | pelikanHarbor | A pelican perched on a wooden dock post in a calm harbor with fishing boats and a warm sunset sky
+011 | owlMoonlight | A great horned owl perched on an ancient oak branch under a full moon with stars and silhouetted trees
+012 | robinGardenGate | A robin perched on a rustic garden gate with climbing roses and a cottage garden in soft morning light
+013 | woodpeckerBirch | A woodpecker clinging to a white birch tree trunk in an autumn forest with golden and orange leaves
+014 | bluejayAutumn | A blue jay perched on a branch laden with red autumn berries against a crisp blue fall sky
+015 | doveSunbeam | A white dove in flight with spread wings catching golden sunbeams through stained glass patterns
+016 | storkNest | A stork standing in a large nest atop a chimney with a European village rooftop panorama below
+017 | flamingoMangrove | A flock of flamingos wading through a tropical mangrove channel with arching roots and dappled sunlight
+018 | cockatooEucalyptus | A white cockatoo with a yellow crest perched in a eucalyptus tree with peeling bark and a blue Australian sky
+019 | hawkDesert | A red-tailed hawk circling above a desert canyon with layered red rock formations and scattered cacti
+020 | sparrowCherry | A small sparrow perched on a cherry blossom branch with delicate pink petals falling in a spring breeze
+021 | ibisMarsh | A scarlet ibis standing in a green marsh with water lilies and tall cattails at golden hour
+022 | egretPaddy | A white egret standing in a flooded rice paddy with green shoots and misty mountains in the background
+023 | finchSunflower | A goldfinch perched on a tall sunflower head in a field of sunflowers under a bright summer sky
+024 | heronBridge | A blue heron standing under a mossy stone bridge with calm water reflections and overhanging willow branches
+025 | cormorantRock | A cormorant drying its wings on a sea-splashed rock with crashing waves and a dramatic cloudy sky
+026 | quailMeadow | A California quail walking through a wildflower meadow with poppies and lupine under rolling green hills
+027 | loonMistyLake | A common loon floating on a misty northern lake at dawn with tall dark pines reflected in still water
+028 | toucanBromeliad | A keel-billed toucan perched beside a bright red bromeliad in a dense tropical canopy
+029 | sandpiperBeach | A sandpiper running along a wet sandy beach at sunset with gentle waves and shells scattered on the shore
+030 | pheasantField | A ring-necked pheasant standing in a golden wheat field with hedgerows and a warm autumn sunset
+
+# ═══════════════════════════════════════════════════════════════
+# LAND MAMMALS (30 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+031 | snowLeopard | A snow leopard resting on a rocky ledge in the Himalayan mountains with snow-dusted peaks and a cold blue sky
+032 | redPandaBamboo | A red panda curled up in a bamboo grove with green stalks and soft dappled light
+033 | mooseAlpine | A bull moose standing in a mountain lake with misty alpine forest and distant snowy peaks reflected in the water
+034 | rabbitWildflowers | A cottontail rabbit sitting among spring wildflowers in a sunlit meadow with butterflies
+035 | hedgehogLeaves | A hedgehog nestled in a pile of colorful autumn leaves near a mossy log with mushrooms
+036 | brownBearRiver | A brown bear standing in a rocky river catching salmon with evergreen forest and mountains behind
+037 | horsePasture | A chestnut horse grazing in a green rolling pasture with a split-rail fence and a red barn in the distance
+038 | bisonPrairie | A bison standing in tall prairie grass with a dramatic thunderstorm sky and distant lightning
+039 | cheetahSavanna | A cheetah resting under an acacia tree on a golden African savanna with a warm sunset sky
+040 | zebraWatering | A group of zebras drinking at a waterhole with their reflections and a golden African sunset
+041 | giraffeSunset | A tall giraffe silhouetted against a vivid orange and purple African sunset with acacia trees
+042 | rhinoMudBath | A rhinoceros standing at a muddy waterhole in the African bush with scattered trees and warm light
+043 | lionPride | A lion resting on a kopje rock overlooking the savanna with golden grass and scattered clouds
+044 | tigerBamboo | A Bengal tiger walking through a bamboo forest with golden light streaming through tall green stalks
+045 | pandaSnow | A giant panda sitting in falling snow eating bamboo with snow-covered mountains behind
+046 | koalaTree | A koala sleeping in the fork of a gum tree with eucalyptus leaves and a soft blue sky
+047 | squirrelOak | A squirrel perched on an oak branch holding an acorn with golden autumn foliage surrounding
+048 | raccoonStream | A raccoon washing food in a forest stream with mossy stones and ferns along the banks
+049 | otterKelp | A sea otter floating on its back in calm kelp-filled waters with a rocky coastline beyond
+050 | beaverLodge | A beaver sitting beside its lodge in a still pond with aspen trees and a golden sunset sky
+051 | arcticFoxTundra | An arctic fox in white winter coat sitting on a snowy tundra with the northern lights faintly visible
+052 | llamaMountain | A llama standing on a mountain trail in the Andes with terraced hillsides and clouds below
+053 | slothRainforest | A three-toed sloth hanging from a tropical tree branch with orchids and large leaves
+054 | chameleonBranch | A colorful chameleon perched on a tropical branch with large green leaves and a bright background
+055 | gorillaJungle | A silverback gorilla sitting peacefully among ferns in a misty mountain jungle
+056 | gazellePlains | A gazelle leaping gracefully across a golden savanna plain with scattered acacia trees
+057 | wildHorsesBeach | Wild horses running along a wide sandy beach with crashing surf and a moody cloudy sky
+058 | lynxForest | A lynx sitting alertly in a snowy boreal forest with snow-laden spruce trees
+059 | fennecFoxDesert | A fennec fox with large ears sitting in sand dunes at twilight with a crescent moon above
+060 | chipmunkStump | A chipmunk perched on a tree stump surrounded by acorns and fallen leaves in warm autumn light
+
+# ═══════════════════════════════════════════════════════════════
+# MARINE & FRESHWATER LIFE (25 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+061 | seahorseCoral | A seahorse clinging to a bright coral branch underwater with sea fans and small tropical fish
+062 | coralReefScene | A vibrant coral reef with clownfish, sea fans, and colorful corals in clear tropical water
+063 | mantaRay | A manta ray gliding through deep blue ocean water with sunbeams filtering from above
+064 | dolphinLeap | A dolphin leaping out of a turquoise ocean with sparkling water droplets and a blue sky
+065 | clownfishAnemone | A clownfish nestled in a large pink sea anemone with colorful reef surrounding
+066 | nautilusDeep | A chambered nautilus floating in deep ocean with soft bioluminescent light and bubbles
+067 | octopusGarden | An octopus among colorful sea plants and shells on the ocean floor with soft blue light
+068 | manateeSpring | A manatee swimming in a crystal-clear spring with aquatic grasses and sunlight filtering through water
+069 | whaleSharkDiver | A whale shark swimming through deep blue water with small fish and streaming sunlight
+070 | lobsterTidePool | A lobster in a rocky tide pool with colorful sea stars and anemones
+071 | crabBeach | A hermit crab on a sandy beach with shells and gentle waves at golden hour
+072 | salmonStream | A salmon leaping up a waterfall in a Pacific Northwest forest stream with mossy rocks
+073 | angelFishReef | An emperor angelfish swimming past a wall of soft coral in clear tropical water
+074 | sealPup | A baby seal resting on a rocky shore with gentle waves and a soft misty horizon
+075 | narwhalArctic | A narwhal surfacing through icy Arctic waters with icebergs and a pale winter sky
+076 | seaHorsePair | Two seahorses intertwined around a strand of seagrass with soft underwater light
+077 | tropicalFishSchool | A school of bright tropical fish swimming through a coral archway with shafts of sunlight
+078 | blueTangReef | A blue tang fish swimming near a brain coral with sea urchins and colorful reef
+079 | riverOtterPlay | Two river otters playing in a clear mountain stream with smooth stones and overhanging ferns
+080 | bettaFish | A vibrant betta fish with flowing fins in calm water with aquatic plants and soft light
+081 | stingrayShallows | A stingray gliding over white sandy shallows in turquoise tropical water
+082 | koiFountain | Koi fish swimming in a stone garden fountain with water plants and fallen cherry blossoms
+083 | walrusFjord | A walrus resting on an ice floe in a Nordic fjord with steep cliffs and cool blue light
+084 | piranhaBrazil | Piranhas swimming in a dark Amazonian river with submerged tree roots and dappled light
+085 | pufferfishCoral | A pufferfish hovering near a colorful coral formation with sea fans and small reef fish
+
+# ═══════════════════════════════════════════════════════════════
+# INSECTS & SMALL CREATURES (15 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+086 | butterflyGarden | A monarch butterfly perched on a purple coneflower in a cottage garden with other wildflowers
+087 | ladybugLeaf | A ladybug on a dewy green leaf with morning water droplets and soft bokeh background
+088 | beeLavender | A bumblebee hovering above lavender flowers in a sunny herb garden
+089 | fireflyMeadow | Fireflies glowing in a summer meadow at dusk with tall grass and a purple twilight sky
+090 | prayingMantisFern | A praying mantis perched on a curled fern frond with forest floor moss and soft green light
+091 | lunaMoth | A luna moth resting on a tree bark with moonlight and forest shadows at night
+092 | dragonflyLotus | A dragonfly perched on a pink lotus bud over a calm pond with lily pads
+093 | snailRain | A garden snail on a wet leaf after rain with water droplets and soft gray light
+094 | frogLilypad | A green tree frog sitting on a lily pad with water lilies and reflections in a calm pond
+095 | chameleonFlower | A chameleon reaching for an insect near a tropical flower with vibrant jungle backdrop
+096 | turtleLog | A painted turtle basking on a floating log in a quiet pond with cattails and dragonflies
+097 | salamanderMoss | A spotted salamander on a mossy rock near a woodland stream with ferns
+098 | geckoWall | A colorful gecko climbing a sunlit stone wall with bougainvillea flowers
+099 | crabSpider | A crab spider camouflaged on a white daisy flower in a sunny garden
+100 | hermitCrabShell | A hermit crab with a colorful shell on a tropical beach at sunset with palm shadows
+
+# ═══════════════════════════════════════════════════════════════
+# LANDSCAPES — MOUNTAINS & FORESTS (25 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+101 | glacierValley | A massive glacier flowing between mountain peaks into a turquoise glacial lake
+102 | bambooForest | A path through a tall bamboo forest with light streaming between green stalks
+103 | redwoodGrove | Towering redwood trees with sunbeams slanting through the canopy and ferns on the forest floor
+104 | cherryBlossomPark | Cherry blossom trees in full bloom along a path in a Japanese park with a stone lantern
+105 | aspenGrove | A grove of golden aspen trees with white trunks and fallen leaves on a mountain trail
+106 | mistyPineForest | A misty pine forest with rays of morning sunlight filtering through the fog
+107 | alpineMeadow | An alpine meadow full of wildflowers with snow-capped peaks and a bright blue sky
+108 | volcanicLake | A calm deep-blue volcanic crater lake surrounded by steep lush green crater walls
+109 | caveEntrance | A cave entrance framed by stalactites looking out to a lush jungle valley below
+110 | stoneArchDesert | A natural stone arch in a red desert landscape with blue sky and distant buttes
+111 | sandDunesSunrise | Rolling golden sand dunes at sunrise with long shadows and a warm orange sky
+112 | waterfallRainbow | A tall waterfall cascading into a pool with a rainbow in the mist and lush green cliffs
+113 | autumnForestPath | A forest path covered in red and gold fallen leaves with tall trees forming a canopy tunnel
+114 | snowyPeakReflect | A snow-capped mountain peak perfectly reflected in a still alpine lake at sunrise
+115 | canyonRiver | A turquoise river winding through a deep red rock canyon with layered cliff walls
+116 | mossCoveredRuins | Ancient moss-covered stone ruins in a misty forest with ivy and wildflowers growing over them
+117 | birchForestWinter | A birch forest in winter with white snow on the ground and a soft overcast sky
+118 | terraceGarden | A hillside terraced garden with stone walls and cascading flowers overlooking a valley
+119 | swampCypress | Cypress trees with draped Spanish moss in a foggy swamp with still dark water reflections
+120 | meadowCreek | A gentle creek winding through a wildflower meadow with butterflies and distant hills
+121 | karst | Dramatic karst limestone peaks rising from a misty river valley with a small bamboo raft
+122 | lavenderSunset | Endless rows of lavender stretching to the horizon under a golden Provencal sunset
+123 | junglePath | A narrow path through dense tropical jungle with enormous leaves and hanging vines
+124 | iceCliff | A massive ice cliff on a glacier face with deep blue ice and turquoise meltwater below
+125 | volcanoSunrise | A smoking volcano cone at sunrise with orange lava glow and dark ash clouds against dawn sky
+
+# ═══════════════════════════════════════════════════════════════
+# LANDSCAPES — WATER & COASTAL (20 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+126 | tidePoolClose | A colorful tide pool with purple sea stars, green anemones, and small fish in a rocky coast
+127 | coralBeach | A tropical beach with turquoise water, white sand, and a single palm tree leaning over the shore
+128 | cliffCoast | Dramatic sea cliffs with crashing waves and a grassy clifftop with wildflowers
+129 | piersunset | A wooden fishing pier extending into calm water at golden sunset with a silhouetted figure
+130 | boardwalkDunes | A weathered boardwalk path through sand dunes with sea grass and the ocean beyond
+131 | waveCrash | A large turquoise ocean wave curling and crashing with white spray against a blue sky
+132 | mangroveKayak | A kayak gliding through a calm mangrove tunnel with green canopy and clear shallow water
+133 | lakehouseDock | A small lakehouse with a wooden dock at sunset with mountains reflected in still water
+134 | waterfrontVillage | A colorful Mediterranean waterfront village with pastel buildings reflected in calm harbor water
+135 | frozenLake | A frozen lake with cracks in thick ice and snowy mountains all around under a clear winter sky
+136 | tropicalAtoll | An aerial view of a circular tropical atoll with turquoise lagoon and deep blue ocean
+137 | riverBend | A wide river bending through lush green valley with mist rising at golden hour
+138 | hotSpringPool | A steaming hot spring pool in a snowy landscape with mineral-colored terraces
+139 | marshSunrise | A wide coastal marsh at sunrise with tall grasses, wading birds, and warm golden light
+140 | islandCove | A hidden island cove with turquoise water, sandy beach, and tropical vegetation on cliffs
+141 | canoeReflection | A canoe resting on a perfectly still lake with mirror reflections of autumn trees
+142 | waterfallPool | A secluded waterfall dropping into a clear pool surrounded by tropical ferns and flowers
+143 | rockyShore | A rocky shoreline at low tide with seaweed-covered boulders and tide pools at golden hour
+144 | fjordCruise | A boat traveling through a narrow fjord with steep green cliffs and waterfalls
+145 | deltaWetland | An aerial view of a river delta spreading into wetlands with winding water channels
+
+# ═══════════════════════════════════════════════════════════════
+# ARCHITECTURE & BUILT ENVIRONMENTS (30 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+146 | gondolaVenice | A gondola gliding through a narrow Venice canal with colorful buildings and a stone bridge
+147 | greenhouseGarden | A Victorian greenhouse filled with tropical plants and flowers with warm light through glass panes
+148 | coveredBridge | A red covered bridge over a stream surrounded by fall foliage with golden and red trees
+149 | treehouseCanopy | A wooden treehouse nestled in a large oak tree with a rope ladder and forest canopy
+150 | cottageGarden | A thatched-roof English cottage with a lush flower garden and a winding stone path
+151 | castleLake | A fairytale castle on a lake island with towers reflected in calm water and misty mountains
+152 | amphitheater | An ancient stone amphitheater on a hilltop overlooking a blue Mediterranean sea
+153 | cafeStreet | A cozy Parisian sidewalk cafe with small round tables, striped awnings, and potted flowers
+154 | bookshopWindow | A charming old bookshop with a bay window display and flower boxes on a cobblestone street
+155 | pagodaGarden | A multi-tiered red pagoda in a Japanese garden with a koi pond and manicured pines
+156 | windmillTulips | A Dutch windmill beside a canal lined with rows of colorful tulips in spring
+157 | lighthouseStorm | A tall lighthouse on a rocky headland with dramatic storm clouds and crashing waves
+158 | haciendaCourt | A Mediterranean hacienda courtyard with a tile fountain, citrus trees, and bougainvillea
+159 | trainStation | A vintage train station platform with an old steam locomotive and hanging flower baskets
+160 | libraryReading | A grand library interior with tall bookshelves, a reading nook, and warm lamp light
+161 | farmhouseMorning | A white farmhouse with a red barn at sunrise with rolling fields and morning mist
+162 | suspensionBridge | A suspension bridge spanning a deep jungle gorge with mist and tropical trees
+163 | moorishArch | An ornate Moorish arch doorway looking out to a garden courtyard with a tiled fountain
+164 | stoneCottageIrish | An Irish stone cottage with a green hillside, stone walls, and sheep grazing nearby
+165 | marketStalls | A vibrant outdoor market with colorful fabric canopies, fruits, and hanging lanterns
+166 | adobeChurch | An adobe mission church with a bell tower against a vivid New Mexico sunset sky
+167 | skiChalet | A cozy ski chalet covered in snow with warm yellow light from windows and mountains behind
+168 | templeSteps | Ancient temple steps leading up through jungle with carved stone and moss
+169 | portTown | A Mediterranean port town with colorful stacked houses climbing a hillside above the harbor
+170 | teaHouse | A traditional Japanese tea house on a garden pond with a curved bridge and maples
+171 | observatoryHill | An astronomical observatory dome on a mountaintop under a starry night sky
+172 | balconyOverlook | A flowering balcony overlooking a coastal town with terracotta rooftops and blue sea
+173 | millPond | An old water mill with a turning wheel beside a quiet pond with ducks and weeping willows
+174 | rooftopGardenCity | A rooftop garden with potted plants and string lights overlooking a city skyline at dusk
+175 | yurtSteppe | A white yurt on a vast green steppe with horses grazing and distant mountains
+
+# ═══════════════════════════════════════════════════════════════
+# BOTANICAL & GARDEN (25 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+176 | orchidHouse | Exotic orchids in a warm greenhouse with condensation on glass and tropical light
+177 | sunflowerField | A vast field of tall sunflowers under a bright blue summer sky with fluffy white clouds
+178 | tulipRows | Rows of multicolored tulips in a Dutch flower field with a distant windmill
+179 | succulentGarden | A terraced succulent garden with geometric stone borders and diverse colorful plants
+180 | herbGarden | A kitchen herb garden in raised wooden beds with lavender, rosemary, and sage
+181 | bonsaiCollection | A collection of bonsai trees on wooden shelves in a sunlit Japanese room
+182 | cherryBlossomStream | Cherry blossoms falling into a gentle stream with pink petals floating on the water
+183 | magnoliaTree | A large magnolia tree in full bloom with white and pink blossoms against a blue spring sky
+184 | wisteriaArbor | A wisteria-covered arbor with cascading purple flowers and dappled light on a garden path
+185 | fernGrotto | A lush fern grotto with water dripping from mossy rocks into a small pool
+186 | cactusGarden | A desert cactus garden at sunset with saguaros, barrel cacti, and prickly pear with orange sky
+187 | irisGarden | Japanese irises blooming around a garden pond with a small wooden bridge
+188 | willowPond | A large weeping willow tree trailing its branches into a still pond with water lilies
+189 | protea | Giant protea flowers with textured petals in a coastal garden with ocean mist
+190 | jacarandaStreet | A street lined with jacaranda trees in full purple bloom with petals carpeting the ground
+191 | roseGarden | A formal rose garden with arches, trellises, and climbing roses in reds, pinks, and whites
+192 | tropicalPalms | A tropical palm garden with different palm varieties and a winding stone path
+193 | mossGarden | A Japanese moss garden with rounded moss mounds, stone paths, and bamboo fencing
+194 | waterliliesGrotto | Water lilies in a hidden garden grotto with stone walls and trailing vines
+195 | wildflowerHillside | A hillside covered in wild poppies, bluebells, and daisies under a spring sky
+196 | autumnMaple | A single large Japanese maple tree in brilliant red autumn foliage reflected in a garden pond
+197 | lotusField | A field of lotus flowers in various stages of bloom floating on a wide calm lake
+198 | vineyardHills | Terraced vineyard rows on rolling hills with autumn grapevine colors
+199 | oliveGrove | An ancient olive grove with gnarled trunks and silver-green leaves on a Mediterranean hillside
+200 | gardenPath | A winding garden path through mixed flower borders with an arch and distant bench
+
+# ═══════════════════════════════════════════════════════════════
+# SEASONAL — WINTER (20 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+201 | snowmanField | A snowman with a top hat and scarf in a snowy field with pine trees and a cozy cabin behind
+202 | iceFishing | A solitary ice fishing hut on a frozen lake with snowy mountains and a cold blue sky
+203 | sleighRide | A horse-drawn sleigh on a snowy forest road with snow-laden pine trees and soft falling snow
+204 | frostedBerries | Red winter berries covered in frost on a bare branch with a soft snowy background
+205 | snowyBarn | A red barn in deep snow with a frozen pond, bare trees, and a pale winter sunset
+206 | iciclesCave | Dramatic icicles hanging from a cave entrance with frozen waterfall and blue ice
+207 | winterCardinals | Two red cardinals on a snow-covered birdfeeder with falling snowflakes
+208 | frozenWaterfall | A frozen waterfall with blue and white ice formations on a cliff face
+209 | snowyChurch | A small white church with a steeple in a snowy New England village at dusk
+210 | winterForestDeer | A deer in a quiet winter forest with snow-covered branches and soft blue light
+211 | hotChocolate | A steaming mug of hot chocolate on a snowy windowsill with a winter scene outside
+212 | sledHill | Children sledding down a snowy hill with colorful sleds and a winter village below
+213 | snowyLanterns | Paper lanterns glowing along a snowy Japanese garden path at twilight
+214 | winterOwl | A snowy owl perched on a fence post in a white winter landscape with soft falling snow
+215 | iceSkatePond | Ice skaters on a frozen village pond with bare trees strung with lights
+216 | cozyCabin | A log cabin in the woods at night with warm light from windows and snow on the roof
+217 | winterBridge | A stone bridge over a frozen stream with snow-covered banks and bare frosted trees
+218 | snowGeese | A flock of snow geese in flight against a gray winter sky over a snowy field
+219 | frostWindow | Frost patterns on a window pane with warm light behind and snow outside
+220 | winterMeadow | A wide snowy meadow at sunrise with pink and gold light on fresh snow and distant pines
+
+# ═══════════════════════════════════════════════════════════════
+# SEASONAL — SPRING (20 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+221 | springRain | A rainy spring day with puddle reflections, a red umbrella, and blooming cherry trees
+222 | nestEggs | A bird nest with pale blue eggs in a flowering dogwood tree with spring blossoms
+223 | lambMeadow | A lamb standing in a spring meadow full of daffodils with green rolling hills
+224 | rainbowValley | A bright rainbow arcing over a green valley after rain with a stream and flowers
+225 | ducklingsLake | A mother duck leading ducklings across a calm lake with reeds and spring greenery
+226 | bluebellWood | A carpet of bluebells under ancient oak trees in a spring woodland
+227 | springCreek | A babbling creek through a spring meadow with violets and fresh green grass
+228 | gardenSprouts | Seedling sprouts in neat garden rows with a watering can and a rustic fence
+229 | appleBlossoms | An apple orchard in full bloom with white and pink blossoms and a blue sky
+230 | springFawn | A young fawn standing in a spring forest with dappled light and small wildflowers
+231 | tadpolePond | Tadpoles swimming in a clear shallow pond with lily pads and frog on the bank
+232 | morningDew | Morning dew drops on spider webs between flowers in a spring garden at sunrise
+233 | sakuraTemple | A Japanese temple with cherry blossom trees in full bloom and petals floating in the air
+234 | springButterflies | Butterflies fluttering over a meadow of spring wildflowers with a clear blue sky
+235 | birdBath | Birds splashing in a stone bird bath in a blooming spring garden with tulips
+236 | cloverfieldBee | A honeybee on a clover flower in a wide green clover field under soft spring light
+237 | peachOrchard | A peach orchard in bloom with soft pink blossoms and a path between the trees
+238 | springStorm | Dark spring storm clouds over a green field with a streak of sunlight breaking through
+239 | goslings | Fluffy goslings following a goose along a grassy pond bank with wildflowers
+240 | plumBlossom | A plum blossom branch with delicate pink flowers against a soft blue-gray spring sky
+
+# ═══════════════════════════════════════════════════════════════
+# SEASONAL — SUMMER (20 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+241 | beachUmbrella | Colorful beach umbrellas on white sand with turquoise ocean and a bright blue sky
+242 | iceCreamCart | A vintage ice cream cart on a sunny boardwalk with beach and ocean in the background
+243 | gardenParty | A summer garden party table with flowers, fruits, and colorful linens under string lights
+244 | summerSwim | A person diving into a clear blue lake from a wooden dock surrounded by trees
+245 | cornfieldSunset | A golden cornfield at sunset with the sun low on the horizon and a warm orange sky
+246 | sailboatRace | Colorful sailboats racing on a windy lake with white-capped waves and a blue sky
+247 | watermelonPicnic | A summer picnic scene with watermelon slices, a checkered blanket, and a shady tree
+248 | summerStorm | A dramatic summer thunderstorm approaching over a sunlit field with dark purple clouds
+249 | poolside | A blue swimming pool with loungers and tropical plants on a sunny summer day
+250 | dragonboatFestival | Colorful dragon boats racing on a river with spectators and festive banners
+251 | summerCottage | A lakeside summer cottage with a screened porch, kayak on the dock, and fireflies at dusk
+252 | fieldKite | A colorful kite flying high over a green summer field with fluffy white clouds
+253 | berryPicking | Ripe red strawberries on the vine in a summer garden with warm sunshine
+254 | hamacaBeach | A hammock strung between two palm trees on a tropical beach at sunset
+255 | summerMarket | A farmers market with colorful produce displays, sunflowers, and striped canopies
+256 | surfWave | A surfer riding a turquoise wave with spray and a tropical island in the background
+257 | campTent | A camping tent beside a mountain lake at dusk with a small campfire and stars appearing
+258 | gardenHose | A garden sprinkler spraying water arcs in a green backyard on a sunny summer day
+259 | cicadaTree | Cicada shells on tree bark with summer green leaves and warm golden light
+260 | summerPorch | A farmhouse front porch with rocking chairs, iced tea, and blooming hydrangeas
+
+# ═══════════════════════════════════════════════════════════════
+# SEASONAL — AUTUMN (20 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+261 | autumnBarn | A weathered barn surrounded by autumn trees in red, orange, and gold with a pumpkin patch
+262 | harvestBasket | A woven basket overflowing with autumn harvest — apples, squash, and corn on a farm table
+263 | foggyForest | A foggy autumn forest with golden and orange leaves and a winding dirt path
+264 | cranberryBog | A cranberry bog at harvest time with red berries floating on water and fall foliage
+265 | acornSquirrel | A squirrel gathering acorns under a towering oak tree with golden autumn leaves falling
+266 | haystackField | Golden haystacks in a harvested field with a rural landscape and autumn sunset
+267 | autumnRiver | A winding river reflecting brilliant autumn foliage with red maples and golden birches
+268 | scarecrowGarden | A friendly scarecrow in a harvest garden with pumpkins, sunflowers, and corn stalks
+269 | fallBridge | A wooden footbridge over a stream in a forest blazing with autumn color
+270 | goldenVineyard | A vineyard in autumn with golden grapevines on rolling hills and soft warm light
+271 | autumnMushrooms | Mushrooms growing on a fallen log in an autumn forest with colorful leaves
+272 | migrationGeese | A V-formation of geese migrating over an autumn landscape at sunset
+273 | ciderMill | An old cider mill with a water wheel beside a stream with autumn trees
+274 | hayrideFarm | A tractor-pulled hayride through a farm with autumn trees and pumpkin fields
+275 | persimmonTree | A persimmon tree heavy with orange fruit against a clear blue autumn sky
+276 | autumnLake | A calm lake reflecting brilliant autumn foliage with a red canoe pulled up on shore
+277 | cornMaze | An aerial view of a corn maze with autumn-colored trees surrounding the farm
+278 | fallenLeaves | Close-up of colorful fallen autumn leaves floating on a still dark pond
+279 | autumnCottage | A stone cottage with smoke from the chimney surrounded by autumn trees and a garden
+280 | sunsetField | A golden harvested field at sunset with lone oak tree silhouetted and warm amber sky
+
+# ═══════════════════════════════════════════════════════════════
+# CULTURAL & ATMOSPHERIC (25 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+281 | teaCeremony | A traditional Japanese tea ceremony setup with matcha bowl, whisk, and tatami room
+282 | moroccoBazaar | A colorful Moroccan bazaar alley with hanging lamps, rugs, and ceramic tiles
+283 | nordicFjord | A small red wooden house on a Norwegian fjord shore with dramatic cliffs and still water
+284 | tokyoRain | A rainy Tokyo street at night with neon reflections on wet pavement and umbrellas
+285 | tuscanHill | A Tuscan hilltop village with cypress trees, rolling green fields, and a golden sunset
+286 | greekIsland | White-washed Greek island buildings with blue domes overlooking a deep blue Aegean sea
+287 | tibetanMonastery | A Buddhist monastery perched on a cliff in misty Himalayan mountains
+288 | scottishHighland | A Scottish highland landscape with heather, a loch, and misty mountains
+289 | africanSunset | An African savanna sunset with silhouetted acacia trees and orange-red sky
+290 | peruvianMarket | A Peruvian outdoor market with textiles, alpaca scarves, and mountain backdrop
+291 | dutchCanal | A Dutch canal in autumn with colorful brick buildings, bicycles, and fallen leaves
+292 | cherryBlossomBridge | A red Japanese bridge over a stream with cherry blossoms and koi fish visible below
+293 | balineseTemple | A Balinese temple gate surrounded by tropical plants with stone carvings and offerings
+294 | havanaCar | A vintage car parked on a colorful Havana street with pastel colonial buildings
+295 | santoriniSunset | A Santorini sunset view with white buildings, blue domes, and the sun sinking into the sea
+296 | kyotoAlley | A narrow Kyoto alley with traditional wooden buildings, paper lanterns, and bamboo
+297 | irishCoast | Dramatic Irish coastal cliffs with green grass, wildflowers, and a moody sea
+298 | saharaCamp | A desert camp at sunset with tents, camels resting, and vast sand dunes behind
+299 | andeanLake | A high Andean lake reflecting snow-capped peaks with llamas grazing on the shore
+300 | venetianMask | An ornate Venetian carnival mask on a table with confetti and a canal view behind
+
+# ═══════════════════════════════════════════════════════════════
+# FOOD & STILL LIFE (15 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+301 | fruitBowl | A ceramic bowl of colorful fruit on a wooden table with a kitchen window and sunlight
+302 | breadBaking | Fresh-baked bread loaves on a rustic wooden cutting board with wheat stalks and flour
+303 | sushiPlate | An artfully arranged sushi plate with nigiri and maki on a lacquered tray with chopsticks
+304 | spiceMarket | Mounds of colorful ground spices in ceramic bowls at an outdoor market stall
+305 | herbTeaCup | A steaming cup of herbal tea with fresh herbs on a garden table with flowers
+306 | cheeseboard | A rustic cheeseboard with different cheeses, grapes, figs, and honey on a wooden table
+307 | pastryShop | A French pastry display case with colorful macarons, tarts, and croissants
+308 | gardenVegetables | A wooden crate of fresh garden vegetables — tomatoes, peppers, squash — on a farm table
+309 | olivesWine | A table with olives, bread, and wine glasses overlooking a Mediterranean vineyard at sunset
+310 | dumplingBamboo | Bamboo steamer baskets with dumplings on a rustic table with tea and soy sauce
+311 | citrusBowl | A bowl of bright citrus fruits — oranges, lemons, limes — on a blue tiled kitchen counter
+312 | pieWindow | A fresh-baked pie cooling on a windowsill with curtains and a view of an autumn garden
+313 | noodleBowl | A bowl of ramen with steam rising, chopsticks, and a small side dish on a wooden counter
+314 | chocolateBox | An open box of assorted artisan chocolates with cocoa beans and tropical flowers
+315 | honeyJar | A jar of golden honey with a wooden dipper, sunflowers, and bees in the background
+
+# ═══════════════════════════════════════════════════════════════
+# WHIMSICAL & FANTASY (20 prompts)
+# ═══════════════════════════════════════════════════════════════
+
+316 | fairyMushroom | A tiny fairy house inside a large red mushroom in a mossy forest with glowing lights
+317 | dragonCastle | A friendly dragon perched on a castle tower overlooking a green valley at sunset
+318 | underwaterCity | An underwater fantasy city with coral buildings, seaweed gardens, and glowing fish
+319 | cloudCastle | A castle floating on clouds above mountain peaks with rainbow bridges
+320 | enchantedForest | An enchanted forest path with glowing flowers, fireflies, and a magical archway
+321 | giantSeashell | A giant seashell on a pink sand beach with bioluminescent waves at twilight
+322 | crystalCave | A cave filled with giant glowing crystals in purple, blue, and green hues
+323 | starryDesert | A desert night scene with an impossibly starry sky, shooting stars, and glowing cacti
+324 | floatingIslands | Floating islands in a sky with waterfalls cascading off their edges into clouds below
+325 | moonGarden | A moonlit garden with silver-glowing flowers and a pathway lit by fireflies
+326 | musicForest | Trees shaped like musical instruments in a whimsical forest with musical notes floating
+327 | rainbowFalls | A waterfall with rainbow-colored water cascading down a cliff into a crystal pool
+328 | bookWorld | An open book with a miniature fantasy world growing out of its pages
+329 | lanternFestival | Hundreds of glowing paper lanterns rising into a twilight sky over a lake
+330 | magicLibrary | A magical library with floating books, spiral staircases, and warm golden light
+331 | gardenFairy | A tiny fairy watering flowers in a garden with oversized blooms and dewdrops
+332 | treehouseLights | A magical treehouse village connected by rope bridges with warm lantern light at dusk
+333 | coralPalace | An underwater palace made of living coral with seahorse guards and pearl gates
+334 | auroraWolves | Wolves watching a spectacular aurora borealis display from a snowy mountain ridge
+335 | zenSandGarden | A perfectly raked zen sand garden with placed stones, moss, and soft morning light
+
+# ═══════════════════════════════════════════════════════════════
+# ABSTRACT & PATTERNS (13 prompts — fills to exactly 283)
+# ═══════════════════════════════════════════════════════════════
+
+336 | geometricSunset | Geometric mountain shapes in layers with a gradient sunset of warm colors
+337 | mandalaFlower | A large symmetrical mandala pattern made of flowers and leaves
+338 | oceanWavesAbstract | Abstract ocean waves in layers of blue, teal, and white with a setting sun
+339 | mosaicBird | A colorful mosaic-style bird made of geometric shapes on a solid background
+340 | stainedGlass | A stained glass window design with a nature scene of mountains, trees, and a river
+341 | tiledPattern | An intricate Moroccan tile pattern with geometric shapes in blue, gold, and white
+342 | paperCutLandscape | A paper cut art style landscape with layered mountains, trees, and clouds in distinct colors
+343 | origamiFlock | A flock of colorful origami cranes in flight against a simple sky background
+344 | quiltPattern | A patchwork quilt pattern with nature-themed squares — leaves, flowers, birds, stars
+345 | artDecoSunrise | An Art Deco sunrise design with geometric rays, clouds, and stylized city skyline
+346 | celticKnot | An intricate Celtic knot border framing a simple landscape with rolling green hills
+347 | folkArtHorse | A Scandinavian folk art style Dala horse with decorative floral patterns
+348 | woodBlockWave | A Japanese woodblock print inspired ocean wave with a mountain in the background

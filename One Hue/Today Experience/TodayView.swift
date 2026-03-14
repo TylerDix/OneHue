@@ -12,6 +12,12 @@ struct TodayView: View {
     @AppStorage("onehue.onboardingShown") private var onboardingShown = false
     @State private var showOnboarding = false
 
+    // Feature tooltips — shown once ever if the user hasn't discovered the feature
+    @AppStorage("onehue.tip.peek") private var peekTipShown = false
+    @AppStorage("onehue.tip.find") private var findTipShown = false
+    @State private var showPeekTip = false
+    @State private var showFindTip = false
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -28,7 +34,7 @@ struct TodayView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
                         if store.phase == .painting && hasUnfilledInSelectedGroup && store.findUsesRemaining > 0 {
-                            Button { store.findNextUnfilled() } label: {
+                            Button { dismissTips(); store.findNextUnfilled() } label: {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "scope")
                                         .font(.system(size: 18, weight: .bold))
@@ -49,6 +55,13 @@ struct TodayView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Find next unfilled region, \(store.findUsesRemaining) uses remaining")
+                            .overlay(alignment: .leading) {
+                                if showFindTip {
+                                    FeatureTip(text: "Find hidden regions")
+                                        .offset(x: -160)
+                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                }
+                            }
                             .padding(16)
                             .transition(.opacity)
                         }
@@ -61,7 +74,8 @@ struct TodayView: View {
                 PaletteView(
                     groups: store.document.groups,
                     selectedIndex: $store.selectedGroupIndex,
-                    filledElements: store.filledElements
+                    filledElements: store.filledElements,
+                    justCompletedGroupIndex: store.justCompletedGroupIndex
                 )
                 .padding(.top, 8)
                 .padding(.bottom, 12)
@@ -109,6 +123,26 @@ struct TodayView: View {
                 store.persistNow()
             }
         }
+        .onChange(of: store.filledElements.count) { _, count in
+            // Peek tip: after 20 fills, if peek was never used
+            if !peekTipShown && count == 20
+                && store.peekUsesRemaining == ColoringStore.maxPeeksPerGame {
+                withAnimation(.easeOut(duration: 0.4)) { showPeekTip = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                    withAnimation(.easeOut(duration: 0.3)) { showPeekTip = false }
+                    peekTipShown = true
+                }
+            }
+            // Find tip: after 40 fills, if find was never used
+            if !findTipShown && count == 40
+                && store.findUsesRemaining == ColoringStore.maxFindsPerGame {
+                withAnimation(.easeOut(duration: 0.4)) { showFindTip = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                    withAnimation(.easeOut(duration: 0.3)) { showFindTip = false }
+                    findTipShown = true
+                }
+            }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
                 .presentationDetents([.large])
@@ -150,16 +184,36 @@ struct TodayView: View {
                     .transition(.opacity)
             }
 
-            if store.canUndo {
-                Button { store.undo() } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .padding(10)
-                        .background(Circle().fill(.white.opacity(0.08)))
+            if store.phase == .painting && store.peekUsesRemaining > 0 {
+                Button {
+                    dismissTips()
+                    store.peek()
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "eye")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white.opacity(store.isPeeking ? 1.0 : 0.7))
+                            .padding(10)
+                            .background(Circle().fill(.white.opacity(store.isPeeking ? 0.2 : 0.08)))
+
+                        Text("\(store.peekUsesRemaining)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(.white.opacity(0.25)))
+                            .offset(x: 4, y: -4)
+                    }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Undo last fill")
+                .disabled(store.isPeeking)
+                .accessibilityLabel("Peek at finished artwork, \(store.peekUsesRemaining) uses remaining")
+                .overlay(alignment: .bottom) {
+                    if showPeekTip {
+                        FeatureTip(text: "Peek at the finished art")
+                            .offset(y: 44)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
                 .transition(.opacity)
             }
 
@@ -187,6 +241,15 @@ struct TodayView: View {
     }
 
     // MARK: - Helpers
+
+    private func dismissTips() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            showPeekTip = false
+            showFindTip = false
+        }
+        peekTipShown = true
+        findTipShown = true
+    }
 
     private var hasUnfilledInSelectedGroup: Bool {
         guard store.selectedGroupIndex < store.document.groups.count else { return false }
@@ -240,6 +303,7 @@ struct TodayView: View {
                     filledElements: allFilled,
                     selectedGroupIndex: 0,
                     showNumbers: false,
+                    isPeeking: false,
                     zoomLevel: 1.0,
                     activeAnimations: [],
                     flashTick: 0
@@ -298,7 +362,7 @@ private struct OnboardingOverlay: View {
     private let steps: [(icon: String, title: String, body: String)] = [
         ("paintbrush.pointed", "Tap to fill", "Each region has a number. Select a color from the palette, then tap matching regions to fill them."),
         ("scope", "Find regions", "Lost a region? Tap the scope button to zoom to the next unfilled area for your selected color."),
-        ("arrow.uturn.backward", "Undo mistakes", "Tapped the wrong spot? Use the undo button in the header to reverse your last fill."),
+        ("eye", "Peek ahead", "Curious what you're building? Tap the eye icon to peek at the finished artwork."),
     ]
 
     var body: some View {
@@ -367,6 +431,26 @@ private struct OnboardingOverlay: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.opacity(0.85).ignoresSafeArea())
+    }
+}
+
+// MARK: - Feature Tip
+
+/// Small floating tooltip to nudge discovery of a feature.
+private struct FeatureTip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule().fill(.white.opacity(0.15))
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+            )
+            .allowsHitTesting(false)
     }
 }
 

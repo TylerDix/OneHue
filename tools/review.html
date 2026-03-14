@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SVG Artwork Review</title>
+<style>
+body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: #eee; margin: 20px; }
+h1 { text-align: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.card { background: #2a2a2a; border-radius: 8px; padding: 8px; text-align: center; }
+.card img { width: 100%; height: auto; border-radius: 4px; background: white; }
+.card .name { font-weight: bold; margin: 4px 0; font-size: 14px; }
+.card .meta { font-size: 11px; color: #999; }
+.card.flagged { border: 2px solid #ff4444; }
+.card.flagged .name { color: #ff6666; }
+.controls { text-align: center; margin: 20px 0; }
+.controls button { margin: 4px; padding: 8px 16px; border-radius: 4px; border: none; background: #444; color: white; cursor: pointer; }
+.controls button.active { background: #0066cc; }
+</style>
+</head>
+<body>
+<h1>One Hue - SVG Artwork Review</h1>
+<div class="controls">
+<button onclick="filter('all')" class="active">All</button>
+<button onclick="filter('flagged')">Flagged Only</button>
+<button onclick="filter('cls')">cls-* format</button>
+<button onclick="filter('st')">st* format</button>
+</div>
+<div class="grid" id="grid"></div>
+<script>
+// Will be populated by the Python script
+const artworks = [
+  {
+    "name": "succulentGarden",
+    "paths": 2339,
+    "colors": 14,
+    "sizeK": 936,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "wildflowersRuins",
+    "paths": 1968,
+    "colors": 10,
+    "sizeK": 836,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "vineyardAutumnRiver",
+    "paths": 1884,
+    "colors": 16,
+    "sizeK": 891,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "glacierBoat",
+    "paths": 1542,
+    "colors": 10,
+    "sizeK": 794,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "ricePaddySunset",
+    "paths": 1312,
+    "colors": 14,
+    "sizeK": 444,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "sundewCloseup",
+    "paths": 1297,
+    "colors": 12,
+    "sizeK": 523,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "tideLine",
+    "paths": 1288,
+    "colors": 16,
+    "sizeK": 491,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "stoneWallCoastline",
+    "paths": 1199,
+    "colors": 16,
+    "sizeK": 570,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "alpineWildflowerMeadow",
+    "paths": 1113,
+    "colors": 16,
+    "sizeK": 516,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "canyon",
+    "paths": 1064,
+    "colors": 12,
+    "sizeK": 621,
+    "format": "cls",
+    "gaps": 8,
+    "flagged": true,
+    "issues": "HIGH_PATHS, CLASS_GAPS(8), LARGE"
+  },
+  {
+    "name": "emptyClassroom",
+    "paths": 1012,
+    "colors": 16,
+    "sizeK": 423,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "peatlandStream",
+    "paths": 993,
+    "colors": 14,
+    "sizeK": 596,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "frozenWaterfall",
+    "paths": 939,
+    "colors": 10,
+    "sizeK": 573,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "toucanTropical",
+    "paths": 922,
+    "colors": 10,
+    "sizeK": 412,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "coralReefTurtle",
+    "paths": 913,
+    "colors": 16,
+    "sizeK": 449,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "starlingMurmuration",
+    "paths": 898,
+    "colors": 16,
+    "sizeK": 532,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "lavaFissure",
+    "paths": 893,
+    "colors": 16,
+    "sizeK": 529,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "desert",
+    "paths": 888,
+    "colors": 12,
+    "sizeK": 409,
+    "format": "cls",
+    "gaps": 8,
+    "flagged": true,
+    "issues": "HIGH_PATHS, CLASS_GAPS(8), LARGE"
+  },
+  {
+    "name": "temple",
+    "paths": 859,
+    "colors": 12,
+    "sizeK": 497,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "lanternFestivalRiver",
+    "paths": 858,
+    "colors": 10,
+    "sizeK": 398,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS"
+  },
+  {
+    "name": "hummingbirdGarden",
+    "paths": 830,
+    "colors": 10,
+    "sizeK": 356,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS"
+  },
+  {
+    "name": "home",
+    "paths": 818,
+    "colors": 10,
+    "sizeK": 336,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS"
+  },
+  {
+    "name": "bench",
+    "paths": 812,
+    "colors": 15,
+    "sizeK": 241,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS"
+  },
+  {
+    "name": "seaTurtleReef",
+    "paths": 808,
+    "colors": 10,
+    "sizeK": 435,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "HIGH_PATHS, LARGE"
+  },
+  {
+    "name": "starFish",
+    "paths": 647,
+    "colors": 12,
+    "sizeK": 322,
+    "format": "cls",
+    "gaps": 8,
+    "flagged": true,
+    "issues": "CLASS_GAPS(8)"
+  },
+  {
+    "name": "ospreyDive",
+    "paths": 607,
+    "colors": 10,
+    "sizeK": 436,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "LARGE"
+  },
+  {
+    "name": "snowyVillage",
+    "paths": 573,
+    "colors": 12,
+    "sizeK": 270,
+    "format": "cls",
+    "gaps": 8,
+    "flagged": true,
+    "issues": "CLASS_GAPS(8)"
+  },
+  {
+    "name": "floodedDockTwilight",
+    "paths": 567,
+    "colors": 10,
+    "sizeK": 468,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "LARGE"
+  },
+  {
+    "name": "tabbyCatWindowsill",
+    "paths": 442,
+    "colors": 10,
+    "sizeK": 442,
+    "format": "st",
+    "gaps": 0,
+    "flagged": true,
+    "issues": "LARGE"
+  },
+  {
+    "name": "hotAirBalloonFestival",
+    "paths": 79,
+    "colors": 10,
+    "sizeK": 57,
+    "format": "st",
+    "gaps": 5,
+    "flagged": true,
+    "issues": "CLASS_GAPS(5)"
+  },
+  {
+    "name": "sunflowerFieldSunset",
+    "paths": 721,
+    "colors": 15,
+    "sizeK": 331,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "redPandaBamboo",
+    "paths": 719,
+    "colors": 16,
+    "sizeK": 335,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "turtles",
+    "paths": 717,
+    "colors": 12,
+    "sizeK": 270,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "pomegranateHalf",
+    "paths": 664,
+    "colors": 12,
+    "sizeK": 283,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "ironBridgeMist",
+    "paths": 649,
+    "colors": 10,
+    "sizeK": 323,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "wheatFieldGoldenHour",
+    "paths": 632,
+    "colors": 10,
+    "sizeK": 363,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "papelPicadoMarket",
+    "paths": 577,
+    "colors": 10,
+    "sizeK": 303,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "driedFlowerBouquet",
+    "paths": 547,
+    "colors": 10,
+    "sizeK": 385,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "paperLanternShop",
+    "paths": 547,
+    "colors": 10,
+    "sizeK": 397,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "orcaBreaching",
+    "paths": 544,
+    "colors": 10,
+    "sizeK": 376,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "lantern",
+    "paths": 521,
+    "colors": 14,
+    "sizeK": 325,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "papayaTree",
+    "paths": 517,
+    "colors": 10,
+    "sizeK": 390,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "jellyfishDeepSea",
+    "paths": 511,
+    "colors": 5,
+    "sizeK": 270,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "japanesePagoda",
+    "paths": 509,
+    "colors": 16,
+    "sizeK": 329,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "lighthouse",
+    "paths": 501,
+    "colors": 10,
+    "sizeK": 274,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "bicycleFlowerBasket",
+    "paths": 474,
+    "colors": 10,
+    "sizeK": 253,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "mapleSeeds",
+    "paths": 474,
+    "colors": 10,
+    "sizeK": 366,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "mangroveHeron",
+    "paths": 468,
+    "colors": 10,
+    "sizeK": 314,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "shipwreckCoral",
+    "paths": 467,
+    "colors": 16,
+    "sizeK": 235,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "forestPuddleLeaves",
+    "paths": 460,
+    "colors": 10,
+    "sizeK": 334,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "sealOnRock",
+    "paths": 437,
+    "colors": 10,
+    "sizeK": 334,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "wolfSnow",
+    "paths": 433,
+    "colors": 10,
+    "sizeK": 281,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "ropeBridgeJungle",
+    "paths": 418,
+    "colors": 10,
+    "sizeK": 274,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "riceTerraces",
+    "paths": 409,
+    "colors": 10,
+    "sizeK": 305,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "baloon",
+    "paths": 407,
+    "colors": 10,
+    "sizeK": 277,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "japanese",
+    "paths": 399,
+    "colors": 10,
+    "sizeK": 198,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "northerlights",
+    "paths": 396,
+    "colors": 12,
+    "sizeK": 215,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "beesHoneycomb",
+    "paths": 383,
+    "colors": 11,
+    "sizeK": 164,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "windmillLavender",
+    "paths": 380,
+    "colors": 10,
+    "sizeK": 247,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "termiteMound",
+    "paths": 377,
+    "colors": 10,
+    "sizeK": 250,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "fishingBoats",
+    "paths": 364,
+    "colors": 16,
+    "sizeK": 123,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "mossyWaterfall",
+    "paths": 363,
+    "colors": 10,
+    "sizeK": 227,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "pitcherPlantsBog",
+    "paths": 361,
+    "colors": 10,
+    "sizeK": 299,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "koi_pond",
+    "paths": 351,
+    "colors": 10,
+    "sizeK": 162,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "whaleTailOcean",
+    "paths": 320,
+    "colors": 10,
+    "sizeK": 274,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "flamingoLagoon",
+    "paths": 318,
+    "colors": 10,
+    "sizeK": 234,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "mistyFjordDawn",
+    "paths": 315,
+    "colors": 10,
+    "sizeK": 320,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "balloonFestival",
+    "paths": 296,
+    "colors": 10,
+    "sizeK": 201,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "windowsillBottles",
+    "paths": 287,
+    "colors": 10,
+    "sizeK": 204,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "seaAnemoneRock",
+    "paths": 284,
+    "colors": 10,
+    "sizeK": 149,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "maypoleVillage",
+    "paths": 271,
+    "colors": 9,
+    "sizeK": 158,
+    "format": "st",
+    "gaps": 1,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "roseBouquetVase",
+    "paths": 268,
+    "colors": 10,
+    "sizeK": 138,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "dragonflyCattail",
+    "paths": 267,
+    "colors": 9,
+    "sizeK": 159,
+    "format": "st",
+    "gaps": 1,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "steamingCraterPool",
+    "paths": 264,
+    "colors": 10,
+    "sizeK": 333,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "rowboatShallows",
+    "paths": 262,
+    "colors": 10,
+    "sizeK": 260,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "hammockPalms",
+    "paths": 259,
+    "colors": 9,
+    "sizeK": 152,
+    "format": "st",
+    "gaps": 1,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "cathedral",
+    "paths": 241,
+    "colors": 16,
+    "sizeK": 110,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "volcanoCraterLake",
+    "paths": 239,
+    "colors": 10,
+    "sizeK": 251,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "wrenCactusSunset",
+    "paths": 226,
+    "colors": 10,
+    "sizeK": 282,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "mushroomForestFloor",
+    "paths": 224,
+    "colors": 11,
+    "sizeK": 157,
+    "format": "st",
+    "gaps": 1,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "owlSunsetBranch",
+    "paths": 216,
+    "colors": 10,
+    "sizeK": 244,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "elephantSavanna",
+    "paths": 215,
+    "colors": 10,
+    "sizeK": 206,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "openPitMine",
+    "paths": 215,
+    "colors": 10,
+    "sizeK": 126,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "lantern2",
+    "paths": 214,
+    "colors": 14,
+    "sizeK": 106,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "shorebirdsFlats",
+    "paths": 201,
+    "colors": 10,
+    "sizeK": 128,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "pumpkinPatch",
+    "paths": 197,
+    "colors": 9,
+    "sizeK": 115,
+    "format": "st",
+    "gaps": 1,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "snowLeopardMountain",
+    "paths": 177,
+    "colors": 16,
+    "sizeK": 71,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "seaStackReflection",
+    "paths": 164,
+    "colors": 10,
+    "sizeK": 124,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "seaStack",
+    "paths": 162,
+    "colors": 10,
+    "sizeK": 170,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "polarBearIce",
+    "paths": 154,
+    "colors": 10,
+    "sizeK": 145,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "snowyOwl",
+    "paths": 154,
+    "colors": 10,
+    "sizeK": 87,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "shamrockRainbow",
+    "paths": 148,
+    "colors": 10,
+    "sizeK": 96,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "stormPetrelSea",
+    "paths": 125,
+    "colors": 10,
+    "sizeK": 151,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "highway",
+    "paths": 114,
+    "colors": 10,
+    "sizeK": 65,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "logCabinSmoke",
+    "paths": 111,
+    "colors": 8,
+    "sizeK": 157,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "heronMoonlitLake",
+    "paths": 102,
+    "colors": 10,
+    "sizeK": 156,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "nightTrainStars",
+    "paths": 100,
+    "colors": 10,
+    "sizeK": 148,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "moon",
+    "paths": 80,
+    "colors": 10,
+    "sizeK": 67,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "mountain",
+    "paths": 73,
+    "colors": 10,
+    "sizeK": 45,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "heronGoldenHour",
+    "paths": 71,
+    "colors": 10,
+    "sizeK": 74,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "campfireStars",
+    "paths": 68,
+    "colors": 10,
+    "sizeK": 80,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "lotusPondWater",
+    "paths": 59,
+    "colors": 10,
+    "sizeK": 34,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "saltFlatSolitude",
+    "paths": 55,
+    "colors": 10,
+    "sizeK": 183,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "foxSleepingSnow",
+    "paths": 53,
+    "colors": 10,
+    "sizeK": 40,
+    "format": "st",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  },
+  {
+    "name": "airBalloon",
+    "paths": 47,
+    "colors": 16,
+    "sizeK": 23,
+    "format": "cls",
+    "gaps": 0,
+    "flagged": false,
+    "issues": ""
+  }
+];
+
+function render(items) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  items.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'card' + (a.flagged ? ' flagged' : '');
+    card.dataset.format = a.format;
+    card.innerHTML = `
+      <img src="../One Hue/Artworks/${a.name}.svg" loading="lazy" onerror="this.style.background='#ff000033'">
+      <div class="name">${a.name}</div>
+      <div class="meta">${a.paths} paths | ${a.colors} colors | ${a.sizeK}K | ${a.format}</div>
+      <div class="meta">${a.issues || 'OK'}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function filter(type) {
+  document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (type === 'all') render(artworks);
+  else if (type === 'flagged') render(artworks.filter(a => a.flagged));
+  else if (type === 'cls') render(artworks.filter(a => a.format === 'cls'));
+  else if (type === 'st') render(artworks.filter(a => a.format === 'st'));
+}
+
+render(artworks);
+</script>
+</body>
+</html>

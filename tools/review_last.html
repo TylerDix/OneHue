@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><style>
+body { background: #333; color: #fff; font-family: sans-serif; margin: 10px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.card { background: #222; border-radius: 6px; padding: 6px; }
+.card h4 { margin: 0 0 4px 0; font-size: 11px; text-align: center; }
+.card img { width: 100%; display: block; }
+</style></head><body>
+<h3>Last batch check</h3>
+<div class="grid" id="grid"></div>
+<script>
+const svgs = [
+"saltFlatSolitude","stormPetrelSea","tideLine","rowboatShallows",
+"windmillLavender","openPitMine","shorebirdsFlats","emptyClassroom"
+];
+const grid = document.getElementById('grid');
+svgs.forEach(n => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h4>${n}</h4><img src="/One%20Hue/Artworks/${n}.svg">`;
+  grid.appendChild(card);
+});
+</script>
+</body></html>

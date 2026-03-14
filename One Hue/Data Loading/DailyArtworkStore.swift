@@ -10,6 +10,10 @@ final class ColoringStore: ObservableObject {
     @Published private(set) var document: SVGDocument
     @Published private(set) var phase: ArtworkPhase = .painting
     @Published var selectedGroupIndex: Int = 0
+    @Published private(set) var justCompletedGroupIndex: Int? = nil
+    @Published private(set) var isPeeking: Bool = false
+    @Published private(set) var peekUsesRemaining: Int = maxPeeksPerGame
+    static let maxPeeksPerGame = 3
 
     @Published private(set) var filledElements: Set<Int> = [] {
         didSet {
@@ -96,6 +100,8 @@ final class ColoringStore: ObservableObject {
         completionPending = false
         undoStack.removeAll()
         findUsesRemaining = Self.maxFindsPerGame
+        peekUsesRemaining = Self.maxPeeksPerGame
+        isPeeking = false
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
         let artwork = catalog[index]
@@ -169,7 +175,13 @@ final class ColoringStore: ObservableObject {
         // Auto-advance to next incomplete group
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
+            justCompletedGroupIndex = groupIdx
             advanceToNextIncompleteGroup()
+            // Clear after palette has time to show checkmark
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+                guard self?.justCompletedGroupIndex == groupIdx else { return }
+                self?.justCompletedGroupIndex = nil
+            }
         }
 
         return .filled
@@ -328,6 +340,19 @@ final class ColoringStore: ObservableObject {
         // lightHaptic.impactOccurred()
     }
 
+    // MARK: - Peek
+
+    /// Temporarily reveals the finished artwork, then fades back.
+    func peek() {
+        guard peekUsesRemaining > 0, !isPeeking, phase == .painting else { return }
+        peekUsesRemaining -= 1
+        isPeeking = true
+        lightHaptic.impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.isPeeking = false
+        }
+    }
+
     func resetProgress() {
         finishTimer?.invalidate(); finishTimer = nil; finishQueue.removeAll()
         completionPending = false
@@ -353,7 +378,7 @@ final class ColoringStore: ObservableObject {
     private var lastFindGroup: Int = -1
 
     /// Total find-clicks allowed per artwork before the scope button hides.
-    private static let maxFindsPerGame = 10
+    static let maxFindsPerGame = 10
     @Published private(set) var findUsesRemaining: Int = maxFindsPerGame
 
     /// Maximum number of find-targets per color group. Prioritises the

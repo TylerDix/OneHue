@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Bottom-anchored color palette for One Hue.
 /// Each swatch shows its group number with a radial progress ring.
-/// Completed colors fall off the palette. Auto-scrolls to selection.
+/// Completed colors flash a checkmark then fall off. Auto-scrolls to selection.
 struct PaletteView: View {
 
     let groups: [SVGColorGroup]
     @Binding var selectedIndex: Int
     let filledElements: Set<Int>
+    let justCompletedGroupIndex: Int?
 
     @State private var hasAppeared = false
 
@@ -18,12 +19,14 @@ struct PaletteView: View {
                     ForEach(groups) { group in
                         let remaining = remainingCount(for: group)
                         let total = group.elementIndices.count
+                        let justCompleted = group.id == justCompletedGroupIndex
 
-                        if remaining > 0 {
+                        if remaining > 0 || justCompleted {
                             swatchButton(
                                 group: group,
                                 remaining: remaining,
-                                total: total
+                                total: total,
+                                justCompleted: justCompleted
                             )
                             .id(group.id)
                             .opacity(hasAppeared ? 1 : 0)
@@ -59,10 +62,21 @@ struct PaletteView: View {
     // MARK: - Swatch
 
     @ViewBuilder
-    private func swatchButton(group: SVGColorGroup, remaining: Int, total: Int) -> some View {
+    private func swatchButton(
+        group: SVGColorGroup,
+        remaining: Int,
+        total: Int,
+        justCompleted: Bool
+    ) -> some View {
         let isSelected = group.id == selectedIndex
-        let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 46 : 38
+        let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 58 : 50
         let progress = total > 0 ? Double(total - remaining) / Double(total) : 0
+        let lum = Self.relativeLuminance(hex: group.hexColor)
+        let isDark = lum < 0.08
+        let labelColor: Color = lum > 0.45
+            ? .black.opacity(0.7)
+            : .white.opacity(0.95)
+        let ringColor = Self.lighterTint(hex: group.hexColor)
 
         Button {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -76,39 +90,89 @@ struct PaletteView: View {
                     .frame(width: size, height: size)
                     .overlay(
                         Circle()
-                            .strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                            .strokeBorder(
+                                isDark ? .white.opacity(0.3) : .white.opacity(0.12),
+                                lineWidth: isDark ? 1.5 : 1
+                            )
                     )
 
-                // Progress ring
+                // Progress ring — color-matched to the swatch
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        .white.opacity(isSelected ? 0.9 : 0.6),
-                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                        ringColor.opacity(isSelected ? 1.0 : 0.7),
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
                     )
-                    .frame(width: size + 4, height: size + 4)
+                    .frame(width: size + 6, height: size + 6)
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.3), value: progress)
 
-                // Selection ring (outside progress ring)
+                // Selection ring — color-matched
                 if isSelected {
                     Circle()
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 2)
-                        .frame(width: size + 12, height: size + 12)
+                        .strokeBorder(ringColor, lineWidth: 2.5)
+                        .frame(width: size + 16, height: size + 16)
+                        .shadow(color: ringColor.opacity(0.4), radius: 5, x: 0, y: 0)
                 }
 
-                // Group number
-                Text("\(group.id + 1)")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+                // Completion checkmark
+                if justCompleted {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(labelColor)
+                        .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    // Group number
+                    Text("\(group.id + 1)")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(labelColor)
+                        .shadow(
+                            color: lum > 0.45
+                                ? .white.opacity(0.3)
+                                : .black.opacity(0.5),
+                            radius: 1, x: 0, y: 1
+                        )
+                }
             }
-            .scaleEffect(isSelected ? 1.1 : 1.0)
-            .animation(.easeOut(duration: 0.15), value: isSelected)
+            .scaleEffect(justCompleted ? 1.2 : (isSelected ? 1.12 : 1.0))
+            .animation(.easeOut(duration: 0.2), value: isSelected)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: justCompleted)
         }
         .buttonStyle(.plain)
+        .disabled(justCompleted)
         .accessibilityLabel("Color \(group.id + 1), \(remaining) of \(total) remaining")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    // MARK: - Color Helpers
+
+    /// Relative luminance (0 = black, 1 = white).
+    private static func relativeLuminance(hex: String) -> Double {
+        let (r, g, b) = rgb(from: hex)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+
+    /// A lighter, more saturated tint of the hex color for rings.
+    private static func lighterTint(hex: String) -> Color {
+        let (r, g, b) = rgb(from: hex)
+        // Convert to HSB, boost brightness and keep saturation punchy
+        var h: CGFloat = 0, s: CGFloat = 0, br: CGFloat = 0, a: CGFloat = 0
+        UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &br, alpha: &a)
+        let newBrightness = min(br + 0.45, 1.0)
+        let newSaturation = min(s * 1.1, 1.0)
+        return Color(hue: Double(h), saturation: Double(newSaturation), brightness: Double(newBrightness))
+    }
+
+    /// Parse hex → (r, g, b) as Doubles 0–1.
+    private static func rgb(from hex: String) -> (Double, Double, Double) {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard cleaned.count == 6,
+              let val = UInt64(cleaned, radix: 16) else { return (0.5, 0.5, 0.5) }
+        let r = Double((val >> 16) & 0xFF) / 255.0
+        let g = Double((val >> 8) & 0xFF) / 255.0
+        let b = Double(val & 0xFF) / 255.0
+        return (r, g, b)
     }
 
     // MARK: - Counts
@@ -123,7 +187,7 @@ struct PaletteView: View {
     }
 
     private var swatchSpacing: CGFloat {
-        UIDevice.current.userInterfaceIdiom == .pad ? 12 : 10
+        UIDevice.current.userInterfaceIdiom == .pad ? 16 : 14
     }
 }
 
@@ -135,7 +199,8 @@ struct PaletteView: View {
     return PaletteView(
         groups: store.document.groups,
         selectedIndex: .constant(0),
-        filledElements: store.filledElements
+        filledElements: store.filledElements,
+        justCompletedGroupIndex: nil
     )
     .padding()
     .background(Color.black)

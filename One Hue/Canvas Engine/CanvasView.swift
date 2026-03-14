@@ -59,6 +59,7 @@ struct CanvasView: View {
                     filledElements: store.filledElements,
                     selectedGroupIndex: store.selectedGroupIndex,
                     showNumbers: showNumbers,
+                    isPeeking: store.isPeeking,
                     zoomLevel: currentZoom,
                     activeAnimations: activeAnimations,
                     flashTick: flashTick
@@ -133,7 +134,7 @@ struct CanvasView: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 let loc = value.location
-                guard store.phase == .painting else { return }
+                guard store.phase == .painting, !store.isPeeking else { return }
 
                 // Already filled a cell this gesture — treat remainder as pan
                 if didFillThisGesture {
@@ -528,6 +529,7 @@ struct SVGCanvasRenderer: View {
     let filledElements: Set<Int>
     let selectedGroupIndex: Int
     let showNumbers: Bool
+    let isPeeking: Bool
     let zoomLevel: CGFloat
     let activeAnimations: [FillAnimation]
     let flashTick: UInt  // drives re-renders during blob animation
@@ -589,7 +591,7 @@ struct SVGCanvasRenderer: View {
 
             // Pass 1: Fill all elements (with blob reveal for active animations)
             for element in document.elements {
-                let isFilled = filledElements.contains(element.id)
+                let isFilled = isPeeking || filledElements.contains(element.id)
                 guard let groupIdx = document.elementGroupMap[element.id],
                       groupIdx < document.groups.count else {
                     // Ungrouped element (border sliver): render as white, no interaction
@@ -655,7 +657,7 @@ struct SVGCanvasRenderer: View {
             }
 
             // Pass 2: Checkerboard on selected group's unfilled elements
-            if showNumbers, selectedGroupIndex < document.groups.count {
+            if showNumbers, !isPeeking, selectedGroupIndex < document.groups.count {
                 let selectedGroup = document.groups[selectedGroupIndex]
                 var combinedPath = Path()
                 for idx in selectedGroup.elementIndices {
@@ -682,7 +684,7 @@ struct SVGCanvasRenderer: View {
             // Pass 3: Number labels — one per cluster, graduated opacity on zoom.
             // As the artwork fills up, non-selected labels become progressively
             // brighter and persist at higher zoom so remaining pieces are findable.
-            if showNumbers {
+            if showNumbers, !isPeeking {
                 let minVisible: CGFloat = 5
                 let fullVisible: CGFloat = 14
 
@@ -777,20 +779,20 @@ struct SVGCanvasRenderer: View {
 
                     placedRects.append(rect)
 
-                    // Dark pill behind boosted labels so they pop against the artwork
-                    if label.needsPill {
-                        let pillW = label.fontSize * 1.1
-                        let pillH = label.fontSize * 1.3
-                        let pillRect = CGRect(
-                            x: label.center.x - pillW / 2,
-                            y: label.center.y - pillH / 2,
-                            width: pillW,
-                            height: pillH
-                        )
-                        let pill = Path(roundedRect: pillRect,
-                                        cornerRadius: label.fontSize * 0.3)
-                        ctx.fill(pill, with: .color(.black.opacity(0.5 * label.alpha)))
-                    }
+                    // Dark pill behind all labels for readability on light backgrounds.
+                    // Boosted tiny labels get a stronger pill.
+                    let pillOpacity = label.needsPill ? 0.5 : 0.35
+                    let pillW = label.fontSize * 1.1
+                    let pillH = label.fontSize * 1.3
+                    let pillRect = CGRect(
+                        x: label.center.x - pillW / 2,
+                        y: label.center.y - pillH / 2,
+                        width: pillW,
+                        height: pillH
+                    )
+                    let pill = Path(roundedRect: pillRect,
+                                    cornerRadius: label.fontSize * 0.3)
+                    ctx.fill(pill, with: .color(.black.opacity(pillOpacity * label.alpha)))
 
                     var text = AttributedString("\(label.groupNumber)")
                     text.font = .system(size: label.fontSize, weight: .semibold, design: .rounded)

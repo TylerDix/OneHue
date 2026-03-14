@@ -116,6 +116,7 @@ private struct GalleryCell: View {
                                 filledElements: Set(0..<doc.totalElements),
                                 selectedGroupIndex: 0,
                                 showNumbers: false,
+                                isPeeking: false,
                                 zoomLevel: 1.0,
                                 activeAnimations: [],
                                 flashTick: 0
