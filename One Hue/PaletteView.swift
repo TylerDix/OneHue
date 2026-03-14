@@ -37,12 +37,14 @@ struct PaletteView: View {
                             )
                             .transition(.asymmetric(
                                 insertion: .scale.combined(with: .opacity),
-                                removal: .move(edge: .bottom).combined(with: .opacity)
+                                removal: .scale(scale: 0.3)
+                                    .combined(with: .opacity)
+                                    .combined(with: .offset(y: -12))
                             ))
                         }
                     }
                 }
-                .animation(.easeOut(duration: 0.4), value: completedGroupCount)
+                .animation(.easeInOut(duration: 0.5), value: completedGroupCount)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
             }
@@ -69,7 +71,7 @@ struct PaletteView: View {
         justCompleted: Bool
     ) -> some View {
         let isSelected = group.id == selectedIndex
-        let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 58 : 50
+        let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 58 : 54
         let progress = total > 0 ? Double(total - remaining) / Double(total) : 0
         let lum = Self.relativeLuminance(hex: group.hexColor)
         let isDark = lum < 0.08
@@ -96,23 +98,33 @@ struct PaletteView: View {
                             )
                     )
 
-                // Progress ring — color-matched to the swatch
+                // Progress ring — snaps to full on completion
                 Circle()
-                    .trim(from: 0, to: progress)
+                    .trim(from: 0, to: justCompleted ? 1.0 : progress)
                     .stroke(
-                        ringColor.opacity(isSelected ? 1.0 : 0.7),
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        ringColor.opacity(justCompleted ? 1.0 : (isSelected ? 1.0 : 0.7)),
+                        style: StrokeStyle(lineWidth: justCompleted ? 4 : 3, lineCap: .round)
                     )
                     .frame(width: size + 6, height: size + 6)
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.3), value: progress)
+                    .animation(.easeOut(duration: 0.4), value: justCompleted)
 
                 // Selection ring — color-matched
-                if isSelected {
+                if isSelected && !justCompleted {
                     Circle()
                         .strokeBorder(ringColor, lineWidth: 2.5)
                         .frame(width: size + 16, height: size + 16)
                         .shadow(color: ringColor.opacity(0.4), radius: 5, x: 0, y: 0)
+                }
+
+                // Soft glow on completion
+                if justCompleted {
+                    Circle()
+                        .fill(ringColor.opacity(0.25))
+                        .frame(width: size + 20, height: size + 20)
+                        .blur(radius: 8)
+                        .transition(.opacity)
                 }
 
                 // Completion checkmark

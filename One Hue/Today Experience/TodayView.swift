@@ -193,13 +193,10 @@ struct TodayView: View {
         HStack {
             if !isOnTodayArtwork {
                 Button { store.loadArtwork(at: Artwork.today().index) } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Today")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                    }
-                    .foregroundStyle(.white.opacity(0.5))
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.trailing, 4)
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
@@ -244,9 +241,10 @@ struct TodayView: View {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "eye")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(store.isPeeking ? 1.0 : 0.7))
+                            .foregroundStyle(.white.opacity(store.isPeeking ? 1.0 : 0.9))
                             .padding(10)
-                            .background(Circle().fill(.white.opacity(store.isPeeking ? 0.2 : 0.08)))
+                            .background(Circle().fill(.black.opacity(store.isPeeking ? 0.55 : 0.35)))
+                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
 
                         Text("\(store.peekUsesRemaining)")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -272,9 +270,10 @@ struct TodayView: View {
             Button { showGallery = true } label: {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(0.9))
                     .padding(10)
-                    .background(Circle().fill(.white.opacity(0.08)))
+                    .background(Circle().fill(.black.opacity(0.35)))
+                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Gallery")
@@ -282,9 +281,10 @@ struct TodayView: View {
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(0.9))
                     .padding(10)
-                    .background(Circle().fill(.white.opacity(0.08)))
+                    .background(Circle().fill(.black.opacity(0.35)))
+                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
@@ -552,9 +552,10 @@ private struct FeatureTip: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "eye")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.9))
                         .padding(10)
-                        .background(Circle().fill(.white.opacity(0.08)))
+                        .background(Circle().fill(.black.opacity(0.35)))
+                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
 
                     Text("3")
                         .font(.system(size: 11, weight: .bold, design: .rounded))

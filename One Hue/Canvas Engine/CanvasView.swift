@@ -26,8 +26,8 @@ struct CanvasView: View {
     @State private var viewportSize: CGSize = .zero
     @State private var currentRenderSize: CGSize = .zero
 
-    // Tap-fill state: ensures only one fill per gesture
-    @State private var didFillThisGesture: Bool = false
+    // Gesture state
+    @State private var isZooming: Bool = false
 
     // Phase animation
     @State private var showNumbers: Bool = true
@@ -130,52 +130,72 @@ struct CanvasView: View {
 
     // MARK: - Paint Gesture
 
+    /// Tap-or-pan: fills happen on finger-lift only if the finger didn't travel far.
+    /// This prevents accidental fills when the user intends to drag/pan.
+    /// Set true once we schedule a fill; reset on onEnded.
+    @State private var didFillThisGesture: Bool = false
+    /// Set true when finger has moved enough to be a pan, cancelling any pending fill.
+    @State private var gestureIsPan: Bool = false
+
+    /// Points of travel before we consider it a pan and cancel the pending fill.
+    private static let panThreshold: CGFloat = 6
+
     private func paintGesture(viewportSize: CGSize, renderSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let loc = value.location
-                guard store.phase == .painting, !store.isPeeking else { return }
-
-                // Already filled a cell this gesture — treat remainder as pan
-                if didFillThisGesture {
-                    let dist = hypot(value.translation.width, value.translation.height)
-                    if dist > 6 { panIfNeeded(value: value) }
-                    return
-                }
-
-                // Try exact hit
-                if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
-                    let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
-                    let isCorrect = groupIdx == store.selectedGroupIndex
-                    let needsFill = !store.filledElements.contains(hit.elementIndex)
-
-                    if isCorrect && needsFill {
-                        didFillThisGesture = true
-                        blobOrigin = hit.svgPoint
-                        store.tryFill(elementIndex: hit.elementIndex)
-                        return
+                // Track movement — if the finger travels far, it's a pan
+                let dist = hypot(value.translation.width, value.translation.height)
+                if dist > Self.panThreshold {
+                    gestureIsPan = true
+                    if contentOverflows {
+                        // Allow panning the canvas
+                        offset = CGSize(
+                            width:  lastOffset.width  + value.translation.width,
+                            height: lastOffset.height + value.translation.height
+                        )
                     }
                 }
 
-                // Exact hit missed or wrong color — try color snap
-                let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
-                if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
-                    didFillThisGesture = true
-                    blobOrigin = svg
-                    store.tryFill(elementIndex: snapIdx)
-                    return
-                }
+                guard store.phase == .painting, !store.isPeeking else { return }
+                guard !isZooming else { return }
+                guard !didFillThisGesture else { return }
+                didFillThisGesture = true
 
-                // Nothing matched — treat as pan
-                let dist = hypot(value.translation.width, value.translation.height)
-                if dist > 6 { panIfNeeded(value: value) }
+                // Schedule fill after a tiny delay — if the finger moves or
+                // a pinch starts before it fires, the fill is cancelled.
+                let loc = value.location
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) {
+                    guard !isZooming, !gestureIsPan else { return }
+                    attemptFill(at: loc, viewportSize: viewportSize, renderSize: renderSize)
+                }
             }
             .onEnded { _ in
-                guard store.phase == .painting else { return }
                 didFillThisGesture = false
-                lastOffset = offset
-                clampOffset()
+                gestureIsPan = false
+                lastOffset = offset; clampOffset()
             }
+    }
+
+    private func attemptFill(at loc: CGPoint, viewportSize: CGSize, renderSize: CGSize) {
+        // Try exact hit
+        if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
+            let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
+            let isCorrect = groupIdx == store.selectedGroupIndex
+            let needsFill = !store.filledElements.contains(hit.elementIndex)
+
+            if isCorrect && needsFill {
+                blobOrigin = hit.svgPoint
+                store.tryFill(elementIndex: hit.elementIndex)
+                return
+            }
+        }
+
+        // Exact hit missed or wrong color — try color snap
+        let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
+        if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
+            blobOrigin = svg
+            store.tryFill(elementIndex: snapIdx)
+        }
     }
 
     // MARK: - Hit Testing
@@ -361,6 +381,9 @@ struct CanvasView: View {
     private var zoomGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
+                if !isZooming {
+                    isZooming = true
+                }
                 let newZoom = min(max(lastZoom * value, minZoom), maxZoom)
                 if currentZoom > 0.01 {
                     let scale = newZoom / currentZoom
@@ -375,6 +398,11 @@ struct CanvasView: View {
                 lastZoom = currentZoom
                 lastOffset = offset
                 clampOffset()
+                // Brief delay before re-enabling fills to prevent accidental
+                // fill from finger lift at the end of a pinch
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    isZooming = false
+                }
             }
     }
 
@@ -681,76 +709,51 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 3: Number labels — one per cluster, graduated opacity on zoom.
-            // As the artwork fills up, non-selected labels become progressively
-            // brighter and persist at higher zoom so remaining pieces are findable.
+            // Pass 3: Number labels — Happy Color style.
+            // Only the selected group's numbers show. Always visible, even zoomed out.
             if showNumbers, !isPeeking {
-                let minVisible: CGFloat = 5
                 let fullVisible: CGFloat = 14
 
-                // Progress ramp: 0 at ≤50% filled, 1 at 90%+ filled
-                let totalEl = document.totalElements
-                let progress = totalEl > 0 ? Double(filledElements.count) / Double(totalEl) : 0
-                let progressRamp = min(max((progress - 0.5) / 0.4, 0), 1)
+                // Minimum screen-point floor — labels are always at least this big on screen
+                let minScreenPt: CGFloat = 12
+                let screenFloor = minScreenPt / max(scale * zoomLevel, 0.001)
 
-                // Non-selected labels fade out on zoom — delay fades as artwork fills
-                let fadeStart: CGFloat = 2.0 + CGFloat(progressRamp) * 3.0   // 2× → 5×
-                let fadeEnd: CGFloat   = 3.5 + CGFloat(progressRamp) * 4.5   // 3.5× → 8×
-                let otherGroupFade = 1.0 - min(max((zoomLevel - fadeStart) / (fadeEnd - fadeStart), 0), 1)
-
-                // Non-selected alpha ramps from 0.65 → 0.9 as artwork fills
-                let otherBaseAlpha = 0.65 + progressRamp * 0.25
-
-                // Collect labels sorted by cluster area (largest first → priority)
                 struct LabelInfo {
                     let center: CGPoint
                     let fontSize: CGFloat
                     let alpha: Double
                     let groupNumber: Int
                     let area: CGFloat
-                    let needsPill: Bool   // background pill for boosted tiny labels
+                    let needsPill: Bool
                 }
 
                 var labels: [LabelInfo] = []
 
+                let groupNumber = selectedGroupIndex < document.groups.count
+                    ? document.groups[selectedGroupIndex].id + 1
+                    : selectedGroupIndex + 1
+
                 for cluster in document.clusters {
+                    guard cluster.groupIndex == selectedGroupIndex else { continue }
                     let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                     guard hasUnfilled else { continue }
-
-                    let isSelected = cluster.groupIndex == selectedGroupIndex
-                    guard isSelected || otherGroupFade > 0.01 else { continue }
 
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
                     let naturalSize = min(dim * 0.35, 60)
 
-                    // Non-selected tiny clusters: hide label to reduce clutter.
-                    // Labels appear when the user selects that color group.
-                    // Threshold relaxes as artwork fills so remaining pieces stay findable.
-                    let hideThresh: CGFloat = 14 - CGFloat(progressRamp) * 6  // 14 → 8
-                    if !isSelected && naturalSize < hideThresh { continue }
-
-                    // Readable minimum ramps up as artwork fills so tiny
-                    // remaining clusters become visible.
-                    let otherMin: CGFloat = 10 + CGFloat(progressRamp) * 6  // 10 → 16
-                    let boostedMin: CGFloat = isSelected ? 18 : otherMin
+                    // Ensure label is always at least minScreenPt on screen
+                    let boostedMin = max(CGFloat(18), screenFloor)
                     let fontSize = max(naturalSize, boostedMin)
                     let needsPill = naturalSize < boostedMin
 
                     let screenPt = fontSize * scale * zoomLevel
-                    guard screenPt >= minVisible else { continue }
-
-                    let sizeAlpha = min((screenPt - minVisible) / (fullVisible - minVisible), 1.0)
-                    let baseAlpha: Double = isSelected ? 0.9 : otherBaseAlpha * otherGroupFade
+                    let sizeAlpha = min(screenPt / fullVisible, 1.0)
                     let area = cluster.bounds.width * cluster.bounds.height
-
-                    let groupNumber = cluster.groupIndex < document.groups.count
-                        ? document.groups[cluster.groupIndex].id + 1
-                        : cluster.groupIndex + 1
 
                     labels.append(LabelInfo(
                         center: cluster.labelCenter,
                         fontSize: fontSize,
-                        alpha: baseAlpha * sizeAlpha,
+                        alpha: 0.9 * sizeAlpha,
                         groupNumber: groupNumber,
                         area: area,
                         needsPill: needsPill
@@ -764,7 +767,6 @@ struct SVGCanvasRenderer: View {
                 var placedRects: [CGRect] = []
 
                 for label in labels {
-                    // Approximate label bounds in SVG space
                     let halfW = label.fontSize * 0.45
                     let halfH = label.fontSize * 0.55
                     let rect = CGRect(
@@ -779,8 +781,6 @@ struct SVGCanvasRenderer: View {
 
                     placedRects.append(rect)
 
-                    // Dark pill behind all labels for readability on light backgrounds.
-                    // Boosted tiny labels get a stronger pill.
                     let pillOpacity = label.needsPill ? 0.5 : 0.35
                     let pillW = label.fontSize * 1.1
                     let pillH = label.fontSize * 1.3

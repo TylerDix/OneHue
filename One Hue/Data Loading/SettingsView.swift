@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage("onehue.dailyReminder") private var dailyReminderEnabled = false
+    @AppStorage("onehue.soundEnabled") private var soundEnabled = true
     @State private var showAbout = false
     @State private var debugTapCount = 0
     @State private var showDebug = false
@@ -35,14 +36,24 @@ struct SettingsView: View {
                     }
                 }
 
-                // 2. Tip Jar
+                // 2. Sound
                 Section {
-                    TipJarSection()
-                } header: {
-                    Text("Support One Hue")
+                    Toggle(isOn: $soundEnabled) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Fill Sound")
+                                Text("A soft tap when you paint")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: soundEnabled ? "speaker.wave.2" : "speaker.slash")
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                    }
                 }
 
-                // 3. About
+                // 3. About (contains tip jar)
                 Section {
                     NavigationLink {
                         AboutView()
@@ -142,6 +153,8 @@ struct SettingsView: View {
                 }
 
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.black)
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -211,6 +224,20 @@ struct AboutView: View {
                 }
                 .padding(.horizontal, 28)
 
+                // Support section
+                VStack(spacing: 16) {
+                    Rectangle()
+                        .fill(.white.opacity(0.06))
+                        .frame(width: 56, height: 0.5)
+
+                    Text("Support One Hue")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.5))
+
+                    TipJarInline()
+                }
+                .padding(.top, 48)
+
                 VStack(spacing: 18) {
                     Rectangle()
                         .fill(.white.opacity(0.06))
@@ -220,7 +247,7 @@ struct AboutView: View {
                         .foregroundStyle(.white.opacity(0.45))
                         .italic()
                 }
-                .padding(.top, 48)
+                .padding(.top, 32)
 
                 Spacer(minLength: 60)
             }
@@ -239,64 +266,66 @@ struct AboutView: View {
     }
 }
 
-// MARK: - Tip Jar
+// MARK: - Tip Jar (Inline for About page)
 
-private struct TipJarSection: View {
+private struct TipJarInline: View {
     @StateObject private var tipJar = TipJarManager.shared
 
     var body: some View {
-        if tipJar.purchaseState == .thankYou {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(spacing: 12) {
+            if tipJar.purchaseState == .thankYou {
+                VStack(spacing: 6) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.pink.opacity(0.8))
                     Text("Thank you!")
-                        .fontWeight(.medium)
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.8))
                     Text("Your support means the world.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
-            } icon: {
-                Image(systemName: "heart.fill")
-                    .foregroundStyle(.pink.opacity(0.8))
-            }
-            .transition(.opacity)
-        } else if tipJar.products.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-        } else {
-            ForEach(tipJar.products) { product in
-                Button {
-                    Task { await tipJar.purchase(product) }
-                } label: {
-                    Label {
-                        HStack {
-                            Text(tipLabel(for: product))
-                            Spacer()
-                            Text(product.displayPrice)
-                                .foregroundStyle(.secondary)
+                .transition(.opacity)
+            } else if tipJar.products.isEmpty {
+                ProgressView()
+                    .padding(.vertical, 8)
+            } else {
+                HStack(spacing: 10) {
+                    ForEach(tipJar.products) { product in
+                        Button {
+                            Task { await tipJar.purchase(product) }
+                        } label: {
+                            VStack(spacing: 6) {
+                                Image(systemName: tipIcon(for: product))
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Text(product.displayPrice)
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.8))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(.white.opacity(0.08))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
+                                    )
+                            )
                         }
-                    } icon: {
-                        Image(systemName: tipIcon(for: product))
-                            .foregroundStyle(.white.opacity(0.7))
+                        .buttonStyle(.plain)
+                        .disabled(tipJar.purchaseState == .purchasing)
                     }
                 }
-                .disabled(tipJar.purchaseState == .purchasing)
-            }
+                .padding(.horizontal, 32)
 
-            if case .failed(let msg) = tipJar.purchaseState {
-                Text(msg)
-                    .font(.caption)
-                    .foregroundStyle(.red.opacity(0.7))
+                if case .failed(let msg) = tipJar.purchaseState {
+                    Text(msg)
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.7))
+                }
             }
-        }
-    }
-
-    private func tipLabel(for product: Product) -> String {
-        switch product.id {
-        case "com.dix.OneHue.tip.small":  return "Small Tip"
-        case "com.dix.OneHue.tip.medium": return "Medium Tip"
-        case "com.dix.OneHue.tip.large":  return "Large Tip"
-        default: return product.displayName
         }
     }
 

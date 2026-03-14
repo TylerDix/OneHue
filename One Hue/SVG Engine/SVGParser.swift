@@ -495,6 +495,14 @@ final class SVGParser: NSObject, XMLParserDelegate {
             return true
         }
 
+        // Small fragment touching a viewBox edge — tiny white scraps from Image Trace
+        let touchesEdge = bounds.minX <= viewBox.minX + 1 ||
+                          bounds.minY <= viewBox.minY + 1 ||
+                          bounds.maxX >= viewBox.maxX - 1 ||
+                          bounds.maxY >= viewBox.maxY - 1
+        let areaRatio = (bounds.width * bounds.height) / (vw * vh)
+        if touchesEdge && areaRatio < 0.002 { return true }
+
         return false
     }
 

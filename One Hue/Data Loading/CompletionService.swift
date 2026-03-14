@@ -11,6 +11,7 @@ final class CompletionService: ObservableObject {
     // MARK: - Published
 
     @Published private(set) var globalCount: Int?
+    @Published private(set) var countryFlags: [String]?
 
     // MARK: - Config
 
@@ -57,10 +58,74 @@ final class CompletionService: ObservableObject {
             if status == 201 || status == 200 || status == 409 {
                 // Success or duplicate — either way, fetch the updated count
                 await fetchCount(artworkID: artworkID)
+                // Best-effort: attach country code to this row
+                await patchCountryCode(artworkID: artworkID)
+                await fetchCountryFlags(artworkID: artworkID)
             }
         } catch {
             // Silent failure — offline is fine
         }
+    }
+
+    // MARK: - Country Code
+
+    /// Best-effort PATCH to set country_code on our completion row.
+    /// Silently fails if the column doesn't exist yet.
+    private func patchCountryCode(artworkID: String) async {
+        let code = Locale.current.region?.identifier ?? ""
+        guard !code.isEmpty else { return }
+
+        let today = Self.todayUTC()
+        let filter = "device_id=eq.\(deviceID)&artwork_id=eq.\(artworkID)&completed_date=eq.\(today)"
+        guard let url = URL(string: "\(baseURL)/daily_completions?\(filter)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue(apiKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try? JSONEncoder().encode(["country_code": code])
+
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
+    /// Fetches distinct country codes for today's completions and converts to flag emojis.
+    func fetchCountryFlags(artworkID: String) async {
+        let today = Self.todayUTC()
+        let query = "artwork_id=eq.\(artworkID)&completed_date=eq.\(today)&select=country_code"
+        guard let url = URL(string: "\(baseURL)/daily_completions?\(query)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else { return }
+
+            if let rows = try? JSONDecoder().decode([[String: String?]].self, from: data) {
+                let codes = Set(rows.compactMap { $0["country_code"] ?? nil })
+                let flags = codes.compactMap { Self.flag(from: $0) }.sorted()
+                if !flags.isEmpty {
+                    self.countryFlags = flags
+                }
+            }
+        } catch {
+            // Silent failure
+        }
+    }
+
+    /// Converts a 2-letter country code (e.g. "US") into a flag emoji.
+    private static func flag(from code: String) -> String? {
+        let upper = code.uppercased()
+        guard upper.count == 2 else { return nil }
+        let base: UInt32 = 0x1F1E6 - 65  // regional indicator A
+        return String(upper.unicodeScalars.compactMap {
+            UnicodeScalar(base + $0.value)
+        }.map { Character($0) })
     }
 
     // MARK: - Fetch Count

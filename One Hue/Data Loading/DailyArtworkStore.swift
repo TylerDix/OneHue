@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import UIKit
+import AVFoundation
 
 @MainActor
 final class ColoringStore: ObservableObject {
@@ -26,18 +27,20 @@ final class ColoringStore: ObservableObject {
 
     private(set) var spatialHash: SpatialHash!
 
-    // MARK: - Undo Stack
-
-    /// Each entry records the elements added by a single fill action.
-    private var undoStack: [Set<Int>] = []
-    private static let maxUndoDepth = 30
-
-    var canUndo: Bool { !undoStack.isEmpty && phase == .painting && finishTimer == nil }
-
-    // MARK: - Haptics (pre-prepared for snappy response)
+    // MARK: - Haptics & Sound
 
     private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
     private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
+
+    private var fillPlayer: AVAudioPlayer? = {
+        // .ambient respects the silent switch and mixes with other audio
+        try? AVAudioSession.sharedInstance().setCategory(.ambient)
+        guard let url = Bundle.main.url(forResource: "bloop", withExtension: "m4a") else { return nil }
+        let player = try? AVAudioPlayer(contentsOf: url)
+        player?.volume = 0.3
+        player?.prepareToPlay()
+        return player
+    }()
 
     // MARK: - Derived
 
@@ -98,7 +101,6 @@ final class ColoringStore: ObservableObject {
         autoCompleteEnabled = false
         finishTimer?.invalidate(); finishTimer = nil; finishQueue.removeAll()
         completionPending = false
-        undoStack.removeAll()
         findUsesRemaining = Self.maxFindsPerGame
         peekUsesRemaining = Self.maxPeeksPerGame
         isPeeking = false
@@ -152,9 +154,6 @@ final class ColoringStore: ObservableObject {
         guard groupIdx == selectedGroupIndex,
               groupIdx < document.groups.count else { return .wrongGroup }
 
-        // Snapshot before any mutations so undo captures the full delta
-        let beforeFill = filledElements
-
         // Fill entire cluster containing the tapped element
         var toFill: Set<Int> = [elementIndex]
         if let clusterIdx = document.elementClusterMap[elementIndex] {
@@ -167,6 +166,12 @@ final class ColoringStore: ObservableObject {
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
 
+        // Soft tap sound on fill (respects Settings toggle)
+        if UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled") {
+            fillPlayer?.currentTime = 0
+            fillPlayer?.play()
+        }
+
         // Auto-complete group when 90%+ filled — forgiveness for invisible stragglers
         let group = document.groups[groupIdx]
         autoCompleteIfNearlyDone(group)
@@ -178,22 +183,13 @@ final class ColoringStore: ObservableObject {
         // entire artwork, fill them all so users never get stuck on invisible pixels.
         autoCompleteGlobalIfNearlyDone()
 
-        // Record undo action: full delta including any auto-completed elements
-        let fullDelta = filledElements.subtracting(beforeFill)
-        if !fullDelta.isEmpty {
-            undoStack.append(fullDelta)
-            if undoStack.count > Self.maxUndoDepth {
-                undoStack.removeFirst()
-            }
-        }
-
         // Auto-advance to next incomplete group
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
             justCompletedGroupIndex = groupIdx
             advanceToNextIncompleteGroup()
             // Clear after palette has time to show checkmark
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 guard self?.justCompletedGroupIndex == groupIdx else { return }
                 self?.justCompletedGroupIndex = nil
             }
@@ -254,9 +250,14 @@ final class ColoringStore: ObservableObject {
         let filled = group.elementIndices.filter { filledElements.contains($0) }.count
         guard Double(filled) / Double(total) >= autoCompleteThreshold else { return }
 
-        let remaining = Set(group.elementIndices.filter { !filledElements.contains($0) })
-        guard !remaining.isEmpty else { return }
-        filledElements.formUnion(remaining)
+        // Only auto-fill tiny/invisible slivers — leave normal-sized pieces for the user
+        let remaining = group.elementIndices.filter { !filledElements.contains($0) }
+        let tinyRemaining = remaining.filter { idx in
+            let el = document.elements[idx]
+            return min(el.bounds.width, el.bounds.height) < tinyThreshold
+        }
+        guard !tinyRemaining.isEmpty else { return }
+        filledElements.formUnion(tinyRemaining)
     }
 
     /// Sweep tiny remnants only on complex artworks (>50 elements).
@@ -273,20 +274,22 @@ final class ColoringStore: ObservableObject {
         }
     }
 
-    /// When the overall artwork has very few elements remaining, begin a gentle
-    /// staggered fill. Scaled by complexity — simple artworks need ≤2 remaining.
+    /// When all remaining elements are tiny slivers, begin a gentle staggered fill.
+    /// Won't trigger if any normal-sized piece remains — the user can tap those.
     private func autoCompleteGlobalIfNearlyDone() {
-        let total = document.totalElements
-        let remaining = total - filledElements.count
-        let maxLeftover = total <= 50 ? 2 : (total <= 100 ? 3 : 5)
-        let globalThreshold = total <= 100 ? 0.99 : 0.97
-        guard remaining > 0, remaining <= maxLeftover || Double(filledElements.count) / Double(total) >= globalThreshold else { return }
-
         // Already running a staggered finish — don't restart
         guard finishTimer == nil else { return }
 
         let leftover = document.groupedIndices.subtracting(filledElements)
         guard !leftover.isEmpty else { return }
+
+        // Only auto-complete if every remaining element is tiny
+        let allTiny = leftover.allSatisfy { idx in
+            let el = document.elements[idx]
+            return min(el.bounds.width, el.bounds.height) < tinyThreshold
+        }
+        guard allTiny else { return }
+
         startFinishingFill(indices: Array(leftover))
     }
 
@@ -363,24 +366,6 @@ final class ColoringStore: ObservableObject {
         }
     }
 
-    // MARK: - Undo
-
-    func undo() {
-        guard let lastAction = undoStack.popLast() else { return }
-        filledElements.subtract(lastAction)
-
-        // Ensure the selected group has unfilled elements; if not, switch to one that does
-        if selectedGroupIndex < document.groups.count {
-            let group = document.groups[selectedGroupIndex]
-            let hasUnfilled = group.elementIndices.contains { !filledElements.contains($0) }
-            if !hasUnfilled {
-                advanceToNextIncompleteGroup()
-            }
-        }
-
-        // lightHaptic.impactOccurred()
-    }
-
     // MARK: - Peek
 
     /// Temporarily reveals the finished artwork, then fades back.
@@ -397,7 +382,6 @@ final class ColoringStore: ObservableObject {
     func resetProgress() {
         finishTimer?.invalidate(); finishTimer = nil; finishQueue.removeAll()
         completionPending = false
-        undoStack.removeAll()
         findUsesRemaining = Self.maxFindsPerGame
         filledElements = []
         phase = .painting

@@ -51,16 +51,25 @@ struct CompletionOverlayView: View {
             if showMessage {
                 VStack(spacing: 14) {
                     Text(Self.preventOrphan(message))
-                        .font(.system(size: 21, weight: .light, design: .serif))
+                        .font(.system(size: 20, weight: .regular, design: .serif))
                         .foregroundStyle(.white.opacity(0.9))
                         .multilineTextAlignment(.center)
-                        .lineSpacing(5)
+                        .lineSpacing(3)
+                        .kerning(-0.2)
 
                     if showCount, isTodayArtwork, let count = completionService.globalCount, count > 0 {
                         Text(countText(count))
                             .font(.system(size: 14, weight: .regular, design: .rounded))
                             .foregroundStyle(.white.opacity(0.45))
                             .transition(.opacity.animation(.easeOut(duration: 0.8)))
+
+                        if let flags = completionService.countryFlags, !flags.isEmpty {
+                            Text(flags.joined(separator: " "))
+                                .font(.system(size: 16))
+                                .lineSpacing(4)
+                                .multilineTextAlignment(.center)
+                                .transition(.opacity.animation(.easeOut(duration: 0.8)))
+                        }
                     }
                 }
                 .padding(.horizontal, 24)
@@ -142,7 +151,7 @@ struct CompletionOverlayView: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(Capsule().fill(.white.opacity(0.12)))
+                        .background(Capsule().fill(.white.opacity(0.15)))
                     }
                     .buttonStyle(.plain)
                     .transition(Self.fadeRise)
@@ -157,7 +166,7 @@ struct CompletionOverlayView: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(Capsule().fill(.white.opacity(0.12)))
+                        .background(Capsule().fill(.white.opacity(0.15)))
                     }
                     .buttonStyle(.plain)
                     .transition(Self.fadeRise)
@@ -182,6 +191,9 @@ struct CompletionOverlayView: View {
         .onAppear {
             updateCountdown()
             beginReveal()
+            if isTodayArtwork {
+                Task { await completionService.fetchCountryFlags(artworkID: artworkID) }
+            }
         }
         .onReceive(timer) { _ in
             updateCountdown()
@@ -191,7 +203,7 @@ struct CompletionOverlayView: View {
     // MARK: - Staged Reveal
 
     /// Gentle cascade: elements arrive top → bottom with the same easeOut curve.
-    /// Total ~3.5s — unhurried, each element gets space to breathe.
+    /// Total ~2.6s — still meditative but doesn't keep user waiting.
     private func beginReveal() {
         if skipReveal {
             showMessage = true
@@ -203,34 +215,34 @@ struct CompletionOverlayView: View {
         }
 
         // 0.0s — Quote card fades up
-        withAnimation(.easeOut(duration: 0.9)) {
+        withAnimation(.easeOut(duration: 0.8)) {
             showMessage = true
         }
 
-        // 0.8s — Global count fades in beneath the quote
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.easeOut(duration: 0.7)) {
+        // 0.6s — Global count fades in beneath the quote
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeOut(duration: 0.6)) {
                 showCount = true
             }
         }
 
-        // 1.8s — Countdown pill
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-            withAnimation(.easeOut(duration: 0.7)) {
+        // 1.3s — Countdown pill
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            withAnimation(.easeOut(duration: 0.6)) {
                 showCountdown = true
             }
         }
 
-        // 2.5s — Feedback buttons
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            withAnimation(.easeOut(duration: 0.6)) {
+        // 1.9s — Feedback buttons
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
+            withAnimation(.easeOut(duration: 0.5)) {
                 showFeedback = true
             }
         }
 
-        // 3.2s — Action buttons
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
-            withAnimation(.easeOut(duration: 0.6)) {
+        // 2.4s — Action buttons
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            withAnimation(.easeOut(duration: 0.5)) {
                 showNextButton = true
             }
         }
