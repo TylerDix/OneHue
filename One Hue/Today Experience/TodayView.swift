@@ -25,6 +25,9 @@ struct TodayView: View {
     @State private var showStuckHint = false
     @State private var stuckTimer: Timer?
 
+    // Debug overlay — toggled via long-press on title
+    @State private var showDebugOverlay = false
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -78,6 +81,26 @@ struct TodayView: View {
                                 }
                             }
                             .padding(16)
+                            .transition(.opacity)
+                        }
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        if showDebugOverlay && store.phase == .painting {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Taps: \(store.tapCount)")
+                                Text("Grabbed: \(store.autoGrabbedCount)")
+                                Text("Elements: \(store.document.totalElements)")
+                                Text("Grab: \(store.debugDisableTinyGrab ? "OFF" : "ON")")
+                                    .foregroundStyle(store.debugDisableTinyGrab ? .red : .green)
+                            }
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.6)))
+                            .padding(16)
+                            .onTapGesture {
+                                store.debugDisableTinyGrab.toggle()
+                            }
                             .transition(.opacity)
                         }
                     }
@@ -251,6 +274,10 @@ struct TodayView: View {
                         .onTapGesture(count: 3) {
                             skipReveal = true
                             withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
+                        }
+                        // DEBUG: long-press title to toggle tap counter overlay
+                        .onLongPressGesture {
+                            withAnimation { showDebugOverlay.toggle() }
                         }
 
                     if store.phase == .complete {

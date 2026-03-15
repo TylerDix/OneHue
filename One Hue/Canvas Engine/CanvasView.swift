@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import QuartzCore
 
 // MARK: - Fill Animation Model
@@ -45,6 +46,9 @@ struct CanvasView: View {
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
+    private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+    /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
+    private var defaultZoom: CGFloat { Self.isIPad ? 1.5 : 1.0 }
 
     private var contentOverflows: Bool {
         guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
@@ -84,6 +88,10 @@ struct CanvasView: View {
             .onAppear {
                 viewportSize = geo.size
                 currentRenderSize = renderSize
+                // iPad starts zoomed so artwork fills the large screen
+                if Self.isIPad {
+                    currentZoom = defaultZoom; lastZoom = defaultZoom
+                }
             }
             .onChange(of: geo.size) { _, newSize in
                 viewportSize = newSize
@@ -147,6 +155,8 @@ struct CanvasView: View {
         case .painting:
             withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
                 showNumbers = true
+                currentZoom = defaultZoom; lastZoom = defaultZoom
+                offset = .zero; lastOffset = .zero
             }
 
         case .complete:
@@ -486,9 +496,10 @@ struct CanvasView: View {
         return maxDist
     }
 
-    private func resetZoom(to zoom: CGFloat = 1.0) {
+    private func resetZoom(to zoom: CGFloat? = nil) {
+        let z = zoom ?? defaultZoom
         withAnimation(.easeInOut(duration: 0.3)) {
-            currentZoom = zoom; lastZoom = zoom
+            currentZoom = z; lastZoom = z
             offset = .zero; lastOffset = .zero
         }
     }

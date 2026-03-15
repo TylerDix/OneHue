@@ -111,6 +111,8 @@ final class ColoringStore: ObservableObject {
         completionPending = false
         findUsesRemaining = Self.maxFindsPerGame
         peekUsesRemaining = Self.maxPeeksPerGame
+        tapCount = 0
+        autoGrabbedCount = 0
         isPeeking = false
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
@@ -168,8 +170,15 @@ final class ColoringStore: ObservableObject {
             toFill.formUnion(document.clusters[clusterIdx].elementIndices)
         }
 
+        let clusterCount = toFill.count
+
         // Also collect tiny neighbors near any element in the filled cluster
-        collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
+        if !debugDisableTinyGrab {
+            collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
+        }
+
+        autoGrabbedCount += toFill.count - clusterCount
+        tapCount += 1
 
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
@@ -187,11 +196,10 @@ final class ColoringStore: ObservableObject {
         // At 95%+ global, sweep remaining tiny elements across all groups
         autoSweepTinyRemnants()
 
-        // Auto-advance to next incomplete group
+        // Celebrate group completion — user picks next color manually (like HC)
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
             justCompletedGroupIndex = groupIdx
-            advanceToNextIncompleteGroup()
             // Clear after palette has time to show checkmark
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 guard self?.justCompletedGroupIndex == groupIdx else { return }
@@ -331,21 +339,27 @@ final class ColoringStore: ObservableObject {
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny".
     /// Scaled by artwork complexity so easy artworks don't auto-grab too many cells.
+    /// iPad uses halved thresholds so more pieces remain for the user to "hunt."
     static let tinyThresholdMax: CGFloat = 50
+    private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
     private var tinyThreshold: CGFloat {
         let total = document.totalElements
-        if total <= 50  { return 15 }
-        if total <= 100 { return 25 }
-        if total <= 200 { return 35 }
-        return Self.tinyThresholdMax
+        let base: CGFloat
+        if total <= 50  { base = 15 }
+        else if total <= 100 { base = 25 }
+        else if total <= 200 { base = 35 }
+        else { base = Self.tinyThresholdMax }
+        return Self.isIPad ? base * 0.5 : base
     }
     /// How far (SVG units) to look for adjacent tiny elements
     private var neighborMargin: CGFloat {
         let total = document.totalElements
-        if total <= 50  { return 5 }
-        if total <= 100 { return 10 }
-        if total <= 200 { return 15 }
-        return 20
+        let base: CGFloat
+        if total <= 50  { base = 5 }
+        else if total <= 100 { base = 10 }
+        else if total <= 200 { base = 15 }
+        else { base = 20 }
+        return Self.isIPad ? base * 0.5 : base
     }
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group
@@ -412,6 +426,20 @@ final class ColoringStore: ObservableObject {
     /// Total find-clicks allowed per artwork before the scope button hides.
     static let maxFindsPerGame = 4
     @Published private(set) var findUsesRemaining: Int = maxFindsPerGame
+
+    // MARK: - Debug / Testing
+
+    /// Running count of user taps (tryFill calls that result in .filled).
+    @Published private(set) var tapCount: Int = 0
+    /// Total elements filled by tiny-neighbor auto-grab (not direct taps).
+    @Published private(set) var autoGrabbedCount: Int = 0
+
+    /// When true, skips the tiny-neighbor BFS so each tap only fills its cluster.
+    /// Toggle via debug triple-tap on the tap counter overlay.
+    var debugDisableTinyGrab: Bool {
+        get { UserDefaults.standard.bool(forKey: "onehue.debug.disableTinyGrab") }
+        set { UserDefaults.standard.set(newValue, forKey: "onehue.debug.disableTinyGrab"); objectWillChange.send() }
+    }
 
     /// Maximum number of find-targets per color group. Prioritises the
     /// largest clusters so the finder highlights meaningful regions first
