@@ -218,9 +218,9 @@ struct AboutView: View {
                 }
 
                 VStack(spacing: 16) {
-                    aboutParagraph("Each day, a new image appears. Bring it to life one color at a time. No clock, no score — just you and the colors.")
-                    aboutParagraph("There are no streaks, no leaderboards, no points. No ads, no accounts, no profiles. Nothing to optimize. Just a single act of focus and beauty.")
-                    aboutParagraph("The intent is simple: one moment of sustained attention in a world that takes it from you constantly.")
+                    aboutParagraph("Each day, a new image appears. Bring it to life one color at a time. No clock, no score\u{00A0}— just you and\u{00A0}the\u{00A0}colors.")
+                    aboutParagraph("There are no streaks, no leaderboards, no points. No ads, no accounts, no profiles. Nothing to optimize. Just a single act of\u{00A0}focus\u{00A0}and\u{00A0}beauty.")
+                    aboutParagraph("The intent is simple: one moment of sustained attention in a world that takes it from\u{00A0}you\u{00A0}constantly.")
                 }
                 .padding(.horizontal, 28)
 
@@ -286,9 +286,12 @@ private struct TipJarInline: View {
                         .foregroundStyle(.white.opacity(0.4))
                 }
                 .transition(.opacity)
-            } else if tipJar.products.isEmpty {
+            } else if tipJar.products.isEmpty && !tipJar.didFinishLoading {
                 ProgressView()
                     .padding(.vertical, 8)
+            } else if tipJar.products.isEmpty {
+                // Products unavailable — hide tip jar gracefully
+                EmptyView()
             } else {
                 HStack(spacing: 10) {
                     ForEach(tipJar.products) { product in

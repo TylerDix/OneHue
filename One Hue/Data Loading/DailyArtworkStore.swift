@@ -331,21 +331,21 @@ final class ColoringStore: ObservableObject {
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny".
     /// Scaled by artwork complexity so easy artworks don't auto-grab too many cells.
-    static let tinyThresholdMax: CGFloat = 90
+    static let tinyThresholdMax: CGFloat = 50
     private var tinyThreshold: CGFloat {
         let total = document.totalElements
-        if total <= 50  { return 25 }
-        if total <= 100 { return 45 }
-        if total <= 200 { return 65 }
+        if total <= 50  { return 15 }
+        if total <= 100 { return 25 }
+        if total <= 200 { return 35 }
         return Self.tinyThresholdMax
     }
     /// How far (SVG units) to look for adjacent tiny elements
     private var neighborMargin: CGFloat {
         let total = document.totalElements
-        if total <= 50  { return 10 }
-        if total <= 100 { return 20 }
-        if total <= 200 { return 30 }
-        return 45
+        if total <= 50  { return 5 }
+        if total <= 100 { return 10 }
+        if total <= 200 { return 15 }
+        return 20
     }
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group

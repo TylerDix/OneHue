@@ -232,7 +232,7 @@ struct CanvasView: View {
 
     /// How far (in SVG units) to search for a same-color unfilled element
     /// when the exact tap misses or hits a wrong-color element.
-    private static let colorSnapRadiusBase: CGFloat = 120
+    private static let colorSnapRadiusBase: CGFloat = 50
 
     /// Transform a screen point (in viewport space) to SVG coordinate space.
     private func screenToSVGPoint(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> CGPoint {
