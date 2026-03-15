@@ -14,7 +14,7 @@ extension Artwork {
 
     // MARK: - Curated Calendar
 
-    /// 275 artworks ordered chronologically (Jan → Dec).
+    /// 284 artworks ordered chronologically (Jan → Dec).
     /// Each artwork anchors to a specific (month, day) and remains the
     /// daily artwork until the next entry's date arrives.
     /// Placement reflects seasonal imagery, cultural resonance, and the
@@ -77,6 +77,7 @@ extension Artwork {
         Artwork(id: "frozenWaterfallBlue",fileName: "frozenWaterfallBlue",displayName: "Frozen Waterfall",       completionMessage: "Even the waterfall rests when winter asks it to.",                              month: 2,  day: 21),
         Artwork(id: "bisonYellowstone",  fileName: "bisonYellowstone",  displayName: "Bison in Yellowstone",   completionMessage: "The herd walks through steam because the earth still breathes here.",           month: 2,  day: 22),
         Artwork(id: "blueMountain",       fileName: "blueMountain",       displayName: "Blue Mountain",          completionMessage: "Distance is just the mountain's way of staying mysterious.",                   month: 2,  day: 23),
+        Artwork(id: "mountainLakeReflection", fileName: "mountainLakeReflection", displayName: "Mountain Lake Reflection", completionMessage: "The mountain only shows its true self to water that holds perfectly still.", month: 2, day: 25),
 
                 // ── March — Thaw, awakening ─────────────────────────────────
 
@@ -161,6 +162,7 @@ extension Artwork {
         Artwork(id: "englishCottage",     fileName: "englishCottage",     displayName: "English Cottage",        completionMessage: "The ivy climbs because the wall invited it years ago.",                        month: 5,  day: 19),
         Artwork(id: "glassGreenhouse",    fileName: "glassGreenhouse",    displayName: "Glass Greenhouse",       completionMessage: "Everything grows when you give it shelter and light.",                         month: 5,  day: 20),
         Artwork(id: "foxCrossingStream", fileName: "foxCrossingStream", displayName: "Fox Crossing Stream",    completionMessage: "The stepping stones were always there — the fox just had to trust them.",       month: 5,  day: 21),
+        Artwork(id: "kayakLakeshore",    fileName: "kayakLakeshore",    displayName: "Kayak Lakeshore",        completionMessage: "The paddle rests because the lake already knows where to take you.",           month: 5,  day: 22),
 
                 // ── June — Early summer, open landscapes ────────────────────
 
@@ -188,6 +190,7 @@ extension Artwork {
         Artwork(id: "trainStation",      fileName: "trainStation",       displayName: "Train Station",          completionMessage: "The clock only matters to the ones who haven't boarded yet.",                   month: 6,  day: 22),
         Artwork(id: "fishVillage",        fileName: "fishVillage",        displayName: "Fishing Village",        completionMessage: "The nets dry in the sun while the sea plans tomorrow.",                       month: 6,  day: 23),
         Artwork(id: "townChurch",         fileName: "townChurch",         displayName: "Town Church",            completionMessage: "The steeple points up so you don't have to.",                                 month: 6,  day: 24),
+        Artwork(id: "dockLanternNight",  fileName: "dockLanternNight",  displayName: "Dock Lantern Night",     completionMessage: "One light is enough when the water carries it twice.",                         month: 6,  day: 25),
 
                 // ── July — Peak summer, tropical ────────────────────────────
 
@@ -217,6 +220,7 @@ extension Artwork {
         Artwork(id: "strawberry",         fileName: "strawberry",         displayName: "Strawberry Field",       completionMessage: "The sweetest things grow closest to the ground.",                              month: 7,  day: 24),
         Artwork(id: "tropicalFish",       fileName: "tropicalFish",       displayName: "Tropical Fish",          completionMessage: "The reef paints everything that swims through it.",                            month: 7,  day: 25),
         Artwork(id: "underwaterShipwreck",fileName:"underwaterShipwreck", displayName: "Underwater Shipwreck",   completionMessage: "Even what sinks becomes a home for something new.",                            month: 7,  day: 26),
+        Artwork(id: "sunflowerField",    fileName: "sunflowerField",    displayName: "Sunflower Field",        completionMessage: "Every head bows the same direction when the sun decides to leave.",             month: 7,  day: 27),
 
                 // ── August — Late summer, ocean life ────────────────────────
 
@@ -244,6 +248,7 @@ extension Artwork {
         Artwork(id: "pingFlamingo",       fileName: "pingFlamingo",       displayName: "Flamingo Pair",          completionMessage: "Pink is just confidence wearing feathers.",                                    month: 8,  day: 22),
         Artwork(id: "pirateShip",        fileName: "pirateShip",         displayName: "Pirate Ship",            completionMessage: "The skull and crossbones fly because someone chose the horizon over the harbor.", month: 8, day: 23),
         Artwork(id: "jelly",              fileName: "jelly",              displayName: "Jellyfish",              completionMessage: "Drifting is a decision the current made for both of you.",                     month: 8,  day: 24),
+        Artwork(id: "desertHighway",     fileName: "desertHighway",     displayName: "Desert Highway",         completionMessage: "The road stretches on because someone believed the horizon was worth reaching.", month: 8, day: 25),
 
                 // ── September — Transition, birds ───────────────────────────
 
@@ -269,6 +274,7 @@ extension Artwork {
         Artwork(id: "medievalClockTower",fileName:"medievalClockTower",  displayName: "Medieval Clock Tower",   completionMessage: "The tower counts the hours for a town that stopped rushing long ago.",          month: 9,  day: 20),
         Artwork(id: "potteryWorkshop",    fileName: "potteryWorkshop",    displayName: "Pottery Workshop",       completionMessage: "The wheel turns and the clay remembers what your hands forgot.",               month: 9,  day: 21),
         Artwork(id: "roadrunner",         fileName: "roadrunner",         displayName: "Roadrunner",             completionMessage: "Speed only matters when you know where the dust settles.",                     month: 9,  day: 22),
+        Artwork(id: "sunkenBoatCoral",   fileName: "sunkenBoatCoral",   displayName: "Sunken Boat Coral",      completionMessage: "The hull forgot how to float, so the coral taught it how to bloom.",            month: 9,  day: 23),
 
                 // ── October — Peak autumn ───────────────────────────────────
 
@@ -295,6 +301,7 @@ extension Artwork {
         Artwork(id: "autumnForestPath",  fileName: "autumnForestPath",   displayName: "Autumn Forest Path",    completionMessage: "The path doesn't end. It just changes what it's covered with.",                month: 10, day: 21),
         Artwork(id: "birdFish",           fileName: "birdFish",           displayName: "Bird and Fish",          completionMessage: "They meet where the water ends and the air begins.",                          month: 10, day: 22),
         Artwork(id: "bioluminescentBay", fileName: "bioluminescentBay",  displayName: "Bioluminescent Bay",     completionMessage: "The water remembers the stars long after the sky forgets.",                     month: 10, day: 23),
+        Artwork(id: "autumnParkBench",   fileName: "autumnParkBench",   displayName: "Autumn Park Bench",      completionMessage: "The leaves settle where they're welcome, and the bench never turns them away.",  month: 10, day: 24),
 
                 // ── November — Deep autumn, earth and warmth ────────────────
 
@@ -314,10 +321,12 @@ extension Artwork {
         Artwork(id: "racoonLake",         fileName: "racoonLake",         displayName: "Raccoon at the Lake",    completionMessage: "Curiosity washes everything twice, just to be sure.",                          month: 11, day: 14),
         Artwork(id: "cactusGarden",       fileName: "cactusGarden",       displayName: "Cactus Garden",          completionMessage: "The driest soil grows the most patient beauty.",                               month: 11, day: 15),
         Artwork(id: "chameleo",           fileName: "chameleo",           displayName: "Chameleon",              completionMessage: "Changing color isn't hiding. It's listening to the room.",                     month: 11, day: 16),
+        Artwork(id: "tidalHarborBoats",  fileName: "tidalHarborBoats",  displayName: "Tidal Harbor Boats",     completionMessage: "The boats rest on the mud because the sea promised to come back.",              month: 11, day: 17),
 
                 // ── December — Winter returns, wonder ───────────────────────
 
         Artwork(id: "cardinalHolly",     fileName: "cardinalHolly",     displayName: "Cardinal on Holly",      completionMessage: "The red bird and the red berry share the same winter secret.",                  month: 12, day: 1),
+        Artwork(id: "ferrySunset",       fileName: "ferrySunset",       displayName: "Ferry Sunset",           completionMessage: "The ferry crosses the same water twice a day and never tires of the view.",     month: 12, day: 2),
         Artwork(id: "christmasWreath",   fileName: "christmasWreath",   displayName: "Christmas Wreath",       completionMessage: "The circle says welcome without ever opening.",                                month: 12, day: 3),
         Artwork(id: "foxSleepingSnow",   fileName: "foxSleepingSnow",   displayName: "Fox Sleeping in Snow",   completionMessage: "The snow covers everything except what's already warm.",                       month: 12, day: 5),
         Artwork(id: "gingerbreadHouse",  fileName: "gingerbreadHouse",  displayName: "Gingerbread House",     completionMessage: "The sweetest architecture melts on the tongue, not in the rain.",              month: 12, day: 7),

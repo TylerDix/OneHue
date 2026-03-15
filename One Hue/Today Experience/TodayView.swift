@@ -247,6 +247,11 @@ struct TodayView: View {
                     Text(store.document.title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
+                        // DEBUG: triple-tap title to preview completion overlay
+                        .onTapGesture(count: 3) {
+                            skipReveal = true
+                            withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
+                        }
 
                     if store.phase == .complete {
                         Image(systemName: "checkmark")
