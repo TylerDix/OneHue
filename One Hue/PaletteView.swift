@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// Floating glass palette for One Hue.
-/// Frosted swatches overlay the bottom of the canvas, letting artwork show through.
-/// Selected swatch lifts into the art with stronger color. Completed colors celebrate
-/// with a checkmark, then shrink-fade away.
+/// Bottom palette bar for One Hue.
+/// Solid dark bar with round color swatches — selected swatch lifts with a ring.
+/// Modeled after Happy Color / top coloring apps: clean, functional, no glass.
 struct PaletteView: View {
 
     let groups: [SVGColorGroup]
@@ -12,6 +11,10 @@ struct PaletteView: View {
     let justCompletedGroupIndex: Int?
 
     @State private var hasAppeared = false
+
+    private var swatchSize: CGFloat {
+        UIDevice.current.userInterfaceIdiom == .pad ? 64 : 58
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -23,7 +26,7 @@ struct PaletteView: View {
                         let justCompleted = group.id == justCompletedGroupIndex
 
                         if remaining > 0 || justCompleted {
-                            swatchButton(
+                            swatch(
                                 group: group,
                                 remaining: remaining,
                                 total: total,
@@ -31,23 +34,25 @@ struct PaletteView: View {
                             )
                             .id(group.id)
                             .opacity(hasAppeared ? 1 : 0)
-                            .offset(y: hasAppeared ? 0 : 10)
+                            .offset(y: hasAppeared ? 0 : 8)
                             .animation(
                                 .easeOut(duration: 0.3).delay(Double(group.id) * 0.025),
                                 value: hasAppeared
                             )
                             .transition(.asymmetric(
                                 insertion: .scale.combined(with: .opacity),
-                                removal: .scale(scale: 0.6)
-                                    .combined(with: .opacity)
+                                removal: .scale(scale: 0.6).combined(with: .opacity)
                             ))
                         }
                     }
                 }
                 .animation(.easeInOut(duration: 0.6), value: completedGroupCount)
                 .padding(.horizontal, 20)
-                .padding(.vertical, 8)
+                // Push swatches down so lift/glow doesn't clip at top
+                .padding(.top, 10)
+                .padding(.bottom, 4)
             }
+            .scrollClipDisabled()
             .onChange(of: selectedIndex) { _, newIdx in
                 if let idx = newIdx {
                     withAnimation(.easeInOut(duration: 0.25)) {
@@ -56,6 +61,10 @@ struct PaletteView: View {
                 }
             }
         }
+        // Fixed height: swatch + top padding + bottom padding
+        .frame(height: swatchSize + 36)
+        .clipped()
+        .background(Color.black)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 hasAppeared = true
@@ -66,84 +75,73 @@ struct PaletteView: View {
     // MARK: - Swatch
 
     @ViewBuilder
-    private func swatchButton(
+    private func swatch(
         group: SVGColorGroup,
         remaining: Int,
         total: Int,
         justCompleted: Bool
     ) -> some View {
         let isSelected = group.id == selectedIndex
-        let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 58 : 54
         let progress = total > 0 ? Double(total - remaining) / Double(total) : 0
         let lum = Self.relativeLuminance(hex: group.hexColor)
-        let labelColor: Color = lum > 0.45
-            ? .black.opacity(0.85)
-            : .white.opacity(0.95)
+        let labelColor: Color = lum > 0.45 ? .black.opacity(0.9) : .white
         let ringColor = Self.lighterTint(hex: group.hexColor)
 
-        // Color intensity: selected gets stronger color, unselected stays glassy
-        let colorOpacity: Double = isSelected || justCompleted ? 0.65 : 0.35
-
         Button {
-            if group.id == selectedIndex {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedIndex = nil
-                }
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedIndex = group.id
-                }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedIndex = group.id == selectedIndex ? nil : group.id
             }
         } label: {
             ZStack {
-                // Glass base — frosted material shows artwork through
+                // Color fill
                 Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: size, height: size)
+                    .fill(group.color)
+                    .frame(width: swatchSize, height: swatchSize)
 
-                // Color overlay — intensity varies by selection state
+                // Subtle inner shadow for depth
                 Circle()
-                    .fill(group.color.opacity(colorOpacity))
-                    .frame(width: size, height: size)
-
-                // Subtle glass border
-                Circle()
-                    .strokeBorder(.white.opacity(0.25), lineWidth: 1)
-                    .frame(width: size, height: size)
+                    .strokeBorder(.black.opacity(0.15), lineWidth: 1)
+                    .frame(width: swatchSize, height: swatchSize)
 
                 // Progress ring
-                Circle()
-                    .trim(from: 0, to: justCompleted ? 1.0 : progress)
-                    .stroke(
-                        ringColor.opacity(isSelected || justCompleted ? 1.0 : 0.6),
-                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
-                    )
-                    .frame(width: size + 5, height: size + 5)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeOut(duration: 0.3), value: progress)
-                    .animation(.easeOut(duration: 0.5), value: justCompleted)
+                if progress > 0 || justCompleted {
+                    Circle()
+                        .trim(from: 0, to: justCompleted ? 1.0 : progress)
+                        .stroke(
+                            ringColor.opacity(isSelected || justCompleted ? 1.0 : 0.6),
+                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                        )
+                        .frame(width: swatchSize + 6, height: swatchSize + 6)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.3), value: progress)
+                        .animation(.easeOut(duration: 0.5), value: justCompleted)
+                }
+
+                // Selection ring + glow
+                if isSelected && !justCompleted {
+                    // Soft glow disc behind the ring
+                    Circle()
+                        .fill(ringColor.opacity(0.35))
+                        .frame(width: swatchSize + 22, height: swatchSize + 22)
+                        .blur(radius: 6)
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 2.5)
+                        .frame(width: swatchSize + 8, height: swatchSize + 8)
+                }
 
                 // Completion glow
                 if justCompleted {
                     Circle()
-                        .strokeBorder(ringColor.opacity(0.5), lineWidth: 2)
-                        .frame(width: size + 14, height: size + 14)
-                        .shadow(color: ringColor.opacity(0.6), radius: 8, x: 0, y: 0)
+                        .strokeBorder(ringColor.opacity(0.6), lineWidth: 2)
+                        .frame(width: swatchSize + 12, height: swatchSize + 12)
+                        .shadow(color: ringColor.opacity(0.5), radius: 6)
                         .transition(.opacity)
                 }
 
-                // Selection ring
-                if isSelected && !justCompleted {
-                    Circle()
-                        .strokeBorder(ringColor, lineWidth: 2)
-                        .frame(width: size + 14, height: size + 14)
-                        .shadow(color: ringColor.opacity(0.5), radius: 6, x: 0, y: 0)
-                }
-
-                // Label: checkmark on completion, number otherwise
+                // Label
                 if justCompleted {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(labelColor)
                         .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
                         .transition(.asymmetric(
@@ -153,21 +151,19 @@ struct PaletteView: View {
                         ))
                 } else {
                     Text("\(group.id + 1)")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundStyle(labelColor)
                         .shadow(
-                            color: lum > 0.45
-                                ? .white.opacity(0.3)
-                                : .black.opacity(0.5),
+                            color: lum > 0.45 ? .white.opacity(0.2) : .black.opacity(0.4),
                             radius: 1, x: 0, y: 1
                         )
                 }
             }
-            // Selected swatch rises into the artwork
-            .offset(y: isSelected && !justCompleted ? -10 : 0)
-            .scaleEffect(justCompleted ? 1.15 : (isSelected ? 1.12 : 1.0))
-            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: justCompleted)
+            // Selected lifts slightly
+            .offset(y: isSelected && !justCompleted ? -6 : 0)
+            .scaleEffect(justCompleted ? 1.12 : (isSelected ? 1.08 : 1.0))
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: justCompleted)
         }
         .buttonStyle(.plain)
         .disabled(justCompleted)
@@ -177,38 +173,37 @@ struct PaletteView: View {
 
     // MARK: - Color Helpers
 
-    /// Relative luminance (0 = black, 1 = white).
     private static func relativeLuminance(hex: String) -> Double {
         let (r, g, b) = rgb(from: hex)
         return 0.2126 * r + 0.7152 * g + 0.0722 * b
     }
 
-    /// A lighter, more saturated tint of the hex color for rings.
     private static func lighterTint(hex: String) -> Color {
         let (r, g, b) = rgb(from: hex)
         var h: CGFloat = 0, s: CGFloat = 0, br: CGFloat = 0, a: CGFloat = 0
         UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &br, alpha: &a)
-        let newBrightness = min(br + 0.45, 1.0)
-        let newSaturation = min(s * 1.1, 1.0)
-        return Color(hue: Double(h), saturation: Double(newSaturation), brightness: Double(newBrightness))
+        return Color(
+            hue: Double(h),
+            saturation: Double(min(s * 1.1, 1.0)),
+            brightness: Double(min(br + 0.45, 1.0))
+        )
     }
 
-    /// Parse hex → (r, g, b) as Doubles 0–1.
     private static func rgb(from hex: String) -> (Double, Double, Double) {
         let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
         guard cleaned.count == 6,
               let val = UInt64(cleaned, radix: 16) else { return (0.5, 0.5, 0.5) }
-        let r = Double((val >> 16) & 0xFF) / 255.0
-        let g = Double((val >> 8) & 0xFF) / 255.0
-        let b = Double(val & 0xFF) / 255.0
-        return (r, g, b)
+        return (
+            Double((val >> 16) & 0xFF) / 255.0,
+            Double((val >> 8) & 0xFF) / 255.0,
+            Double(val & 0xFF) / 255.0
+        )
     }
 
     // MARK: - Counts
 
     private func remainingCount(for group: SVGColorGroup) -> Int {
-        let filled = group.elementIndices.filter { filledElements.contains($0) }.count
-        return group.elementIndices.count - filled
+        group.elementIndices.count - group.elementIndices.filter { filledElements.contains($0) }.count
     }
 
     private var completedGroupCount: Int {
