@@ -11,6 +11,7 @@ struct CompletionOverlayView: View {
     @ObservedObject var completionService: CompletionService
     var onNext: (() -> Void)? = nil
     var onGallery: (() -> Void)? = nil
+    var onShare: (() -> Void)? = nil
     var isTodayArtwork: Bool = false
     /// Skip the staged reveal and show everything immediately (e.g. cold launch
     /// with an already-completed artwork).
@@ -193,37 +194,54 @@ struct CompletionOverlayView: View {
 
             // Action buttons
             if showNextButton {
-                if isTodayArtwork, let onGallery {
-                    Button(action: onGallery) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "square.grid.2x2")
-                                .font(.system(size: 12, weight: .semibold))
-                            Text("Gallery")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                HStack(spacing: 12) {
+                    if let onShare {
+                        Button(action: onShare) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Share")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                            }
+                            .foregroundStyle(.white.opacity(0.75))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Capsule().fill(.white.opacity(0.15)))
                         }
-                        .foregroundStyle(.white.opacity(0.75))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Capsule().fill(.white.opacity(0.15)))
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .transition(Self.fadeRise)
-                } else if let onNext {
-                    Button(action: onNext) {
-                        HStack(spacing: 6) {
-                            Text("Next")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 12, weight: .semibold))
+
+                    if isTodayArtwork, let onGallery {
+                        Button(action: onGallery) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.grid.2x2")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Gallery")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                            }
+                            .foregroundStyle(.white.opacity(0.75))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Capsule().fill(.white.opacity(0.15)))
                         }
-                        .foregroundStyle(.white.opacity(0.75))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Capsule().fill(.white.opacity(0.15)))
+                        .buttonStyle(.plain)
+                    } else if let onNext {
+                        Button(action: onNext) {
+                            HStack(spacing: 6) {
+                                Text("Next")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundStyle(.white.opacity(0.75))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Capsule().fill(.white.opacity(0.15)))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .transition(Self.fadeRise)
                 }
+                .transition(Self.fadeRise)
             }
 
             Spacer()
