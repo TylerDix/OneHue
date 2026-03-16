@@ -34,14 +34,11 @@ struct TodayView: View {
 
             VStack(spacing: 0) {
 
-                // Header — always visible so settings is accessible.
-                // Uses a clear spacer to reserve its height in the VStack;
-                // the actual header is overlaid in the ZStack above the
-                // completion overlay so it stays tappable.
-                Color.clear
-                    .frame(height: 0)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
+                // Header spacer — reserves height in VStack for the overlaid header.
+                // Black background matches the app chrome.
+                Color.black
+                    .frame(height: 44)
+                    .padding(.top, 4)
 
                 // Canvas
                 CanvasView(store: store)
@@ -106,24 +103,25 @@ struct TodayView: View {
                     }
                     .accessibilityLabel("Coloring canvas, \(store.document.title)")
                     .accessibilityHint("Tap colored regions to fill them")
-                    // Floating glass palette — overlaps bottom of canvas
-                    .overlay(alignment: .bottom) {
-                        ZStack(alignment: .top) {
-                            PaletteView(
-                                groups: store.document.groups,
-                                selectedIndex: $store.selectedGroupIndex,
-                                filledElements: store.filledElements,
-                                justCompletedGroupIndex: store.justCompletedGroupIndex
-                            )
 
-                            if showPaletteTip {
-                                FeatureTip(text: "Tap a color to highlight its pieces")
-                                    .offset(y: -28)
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                            }
+                // Palette bar — slides off bottom on completion
+                if !showCompletion {
+                    ZStack(alignment: .top) {
+                        PaletteView(
+                            groups: store.document.groups,
+                            selectedIndex: $store.selectedGroupIndex,
+                            filledElements: store.filledElements,
+                            justCompletedGroupIndex: store.justCompletedGroupIndex
+                        )
+
+                        if showPaletteTip {
+                            FeatureTip(text: "Tap a color to highlight its pieces")
+                                .offset(y: -28)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
-                        .padding(.bottom, 8)
                     }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
@@ -150,12 +148,14 @@ struct TodayView: View {
                 .transition(.opacity)
             }
 
-            // Header — above completion overlay so buttons stay tappable
-            VStack {
+            // Header — pinned to top, above completion overlay so buttons stay tappable
+            VStack(spacing: 0) {
                 header
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-                Spacer()
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
+                    .background(Color.black)
+                Color.clear
+                    .allowsHitTesting(false)
             }
 
             // First-run onboarding
@@ -262,8 +262,9 @@ struct TodayView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.trailing, 4)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
@@ -302,12 +303,14 @@ struct TodayView: View {
 
             Spacer()
 
+            #if DEBUG
             if store.phase == .painting {
                 Text(store.progressText)
                     .font(.system(size: 14, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.5))
                     .transition(.opacity)
             }
+            #endif
 
             if store.phase == .painting && store.peekUsesRemaining > 0 {
                 Button {
