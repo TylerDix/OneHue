@@ -68,7 +68,7 @@ struct CanvasView: View {
                     selectedGroupIndex: store.selectedGroupIndex,
                     showNumbers: showNumbers,
                     isPeeking: store.isPeeking,
-                    zoomLevel: currentZoom,
+                    zoomLevel: currentZoom / defaultZoom,
                     activeAnimations: activeAnimations,
                     flashTick: flashTick,
                     pulsePhase: pulsePhase
@@ -818,12 +818,15 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 3: Number labels. When no color selected, show all groups
-            // with relaxed zoom threshold so numbers are visible at 1x.
+            // Pass 3: Number labels.
+            // No color selected → show ONE label per group (largest cluster only)
+            // Color selected → show all clusters for that group
             if showNumbers, !isPeeking {
                 let showAllGroups = selectedGroupIndex == nil
-                let minVisible: CGFloat = showAllGroups ? 3 : 8
-                let fullVisible: CGFloat = showAllGroups ? 6 : 14
+                let isLargeScreen = UIDevice.current.userInterfaceIdiom == .pad
+                // iPad: require more zoom to reveal numbers
+                let minVisible: CGFloat = showAllGroups ? (isLargeScreen ? 5 : 3) : (isLargeScreen ? 12 : 8)
+                let fullVisible: CGFloat = showAllGroups ? (isLargeScreen ? 9 : 6) : (isLargeScreen ? 18 : 14)
 
                 struct LabelInfo {
                     let center: CGPoint
@@ -834,12 +837,35 @@ struct SVGCanvasRenderer: View {
                     let needsPill: Bool
                 }
 
-                var labels: [LabelInfo] = []
+                // When no color selected, pick only the largest unfilled cluster per group
+                var bestClusterPerGroup: [Int: (cluster: ElementCluster, area: CGFloat)] = [:]
+                var candidateClusters: [ElementCluster] = []
 
                 for cluster in document.clusters {
                     if let selIdx = selectedGroupIndex {
                         guard cluster.groupIndex == selIdx else { continue }
+                        candidateClusters.append(cluster)
+                    } else {
+                        let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
+                        guard hasUnfilled else { continue }
+                        let area = cluster.bounds.width * cluster.bounds.height
+                        if let existing = bestClusterPerGroup[cluster.groupIndex] {
+                            if area > existing.area {
+                                bestClusterPerGroup[cluster.groupIndex] = (cluster, area)
+                            }
+                        } else {
+                            bestClusterPerGroup[cluster.groupIndex] = (cluster, area)
+                        }
                     }
+                }
+
+                if showAllGroups {
+                    candidateClusters = bestClusterPerGroup.values.map { $0.cluster }
+                }
+
+                var labels: [LabelInfo] = []
+
+                for cluster in candidateClusters {
                     let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                     guard hasUnfilled else { continue }
 
@@ -852,8 +878,8 @@ struct SVGCanvasRenderer: View {
                     let fontSize = max(naturalSize, CGFloat(24))
                     let needsPill = naturalSize < 24
 
-                    // Numbers require a bit of zoom to appear — you search the
-                    // artwork by color/tint first, numbers confirm when close.
+                    // Numbers require zoom to appear — search by color first,
+                    // numbers confirm when close.
                     let screenPt = fontSize * scale * zoomLevel
                     guard screenPt >= minVisible else { continue }
 
