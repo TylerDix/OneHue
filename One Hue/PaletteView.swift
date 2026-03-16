@@ -103,23 +103,8 @@ struct PaletteView: View {
                     .strokeBorder(.black.opacity(0.15), lineWidth: 1)
                     .frame(width: swatchSize, height: swatchSize)
 
-                // Progress ring
-                if progress > 0 || justCompleted {
-                    Circle()
-                        .trim(from: 0, to: justCompleted ? 1.0 : progress)
-                        .stroke(
-                            ringColor.opacity(isSelected || justCompleted ? 1.0 : 0.6),
-                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
-                        )
-                        .frame(width: swatchSize + 6, height: swatchSize + 6)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeOut(duration: 0.3), value: progress)
-                        .animation(.easeOut(duration: 0.5), value: justCompleted)
-                }
-
-                // Selection ring + glow
+                // Selection glow disc
                 if isSelected && !justCompleted {
-                    // Soft glow disc behind the ring
                     Circle()
                         .fill(ringColor.opacity(0.35))
                         .frame(width: swatchSize + 22, height: swatchSize + 22)
@@ -127,6 +112,24 @@ struct PaletteView: View {
                     Circle()
                         .strokeBorder(.white, lineWidth: 2.5)
                         .frame(width: swatchSize + 8, height: swatchSize + 8)
+                }
+
+                // Progress track + fill ring
+                Circle()
+                    .stroke(.white.opacity(0.12), lineWidth: 3.5)
+                    .frame(width: swatchSize + 6, height: swatchSize + 6)
+
+                if progress > 0 || justCompleted {
+                    Circle()
+                        .trim(from: 0, to: justCompleted ? 1.0 : progress)
+                        .stroke(
+                            ringColor.opacity(isSelected || justCompleted ? 1.0 : 0.7),
+                            style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                        )
+                        .frame(width: swatchSize + 6, height: swatchSize + 6)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.3), value: progress)
+                        .animation(.easeOut(duration: 0.5), value: justCompleted)
                 }
 
                 // Completion glow

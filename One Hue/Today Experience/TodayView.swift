@@ -25,6 +25,9 @@ struct TodayView: View {
     @State private var showStuckHint = false
     @State private var stuckTimer: Timer?
 
+    // Confetti
+    @State private var showConfetti = false
+
     // Debug overlay — toggled via long-press on title
     @State private var showDebugOverlay = false
 
@@ -134,6 +137,14 @@ struct TodayView: View {
                 }
             }
 
+            // Confetti — bursts over canvas, under completion overlay
+            ConfettiView(
+                colors: store.document.groups.map { $0.color },
+                isActive: $showConfetti
+            )
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+
             // Completion overlay — the app's resting state until midnight
             if showCompletion {
                 CompletionOverlayView(
@@ -142,6 +153,7 @@ struct TodayView: View {
                     completionService: CompletionService.shared,
                     onNext: { loadNextArtwork() },
                     onGallery: { withAnimation { showCompletion = false }; showGallery = true },
+                    onShare: { shareCompletedArtwork() },
                     isTodayArtwork: store.currentArtworkIndex == Artwork.today().index,
                     skipReveal: skipReveal
                 )
@@ -276,8 +288,16 @@ struct TodayView: View {
                     Text(store.document.title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
-                        // DEBUG: triple-tap title to preview completion overlay
+                        // DEBUG: 5-tap title to reset artwork, 3-tap to preview completion
+                        .onTapGesture(count: 5) {
+                            showCompletion = false
+                            showConfetti = false
+                            skipReveal = false
+                            store.resetProgress()
+                        }
                         .onTapGesture(count: 3) {
+                            showConfetti = false
+                            DispatchQueue.main.async { showConfetti = true }
                             skipReveal = true
                             withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
                         }
@@ -446,6 +466,8 @@ struct TodayView: View {
 
         // 0.0s — Canvas freezes (phase = .complete disables gestures).
         //        Numbers dissolve (CanvasView handles this, ~1s).
+        //        Confetti bursts immediately.
+        showConfetti = true
 
         // 0.8s — Slowly drift back to center (1.5s ease).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
@@ -460,6 +482,7 @@ struct TodayView: View {
 
     private func resetCompletionSequence() {
         showCompletion = false
+        showConfetti = false
     }
 
     // MARK: - Share
