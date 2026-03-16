@@ -16,8 +16,17 @@ struct TodayView: View {
     // Feature tooltips — shown once ever if the user hasn't discovered the feature
     @AppStorage("onehue.tip.peek") private var peekTipShown = false
     @AppStorage("onehue.tip.find") private var findTipShown = false
+    @AppStorage("onehue.tip.palette") private var paletteTipShown = false
     @State private var showPeekTip = false
     @State private var showFindTip = false
+    @State private var showPaletteTip = false
+
+    // "Stuck" hint — nudges the scope button when few pieces remain and user is idle
+    @State private var showStuckHint = false
+    @State private var stuckTimer: Timer?
+
+    // Debug overlay — toggled via long-press on title
+    @State private var showDebugOverlay = false
 
     var body: some View {
         ZStack {
@@ -25,21 +34,18 @@ struct TodayView: View {
 
             VStack(spacing: 0) {
 
-                // Header — always visible so settings is accessible.
-                // Uses a clear spacer to reserve its height in the VStack;
-                // the actual header is overlaid in the ZStack above the
-                // completion overlay so it stays tappable.
-                Color.clear
-                    .frame(height: 0)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
+                // Header spacer — reserves height in VStack for the overlaid header.
+                // Black background matches the app chrome.
+                Color.black
+                    .frame(height: 44)
+                    .padding(.top, 4)
 
                 // Canvas
                 CanvasView(store: store)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
                         if store.phase == .painting && hasUnfilledInSelectedGroup && store.findUsesRemaining > 0 {
-                            Button { dismissTips(); store.findNextUnfilled() } label: {
+                            Button { dismissTips(); showStuckHint = false; store.findNextUnfilled() } label: {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "scope")
                                         .font(.system(size: 18, weight: .bold))
@@ -61,7 +67,11 @@ struct TodayView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("Find next unfilled region, \(store.findUsesRemaining) uses remaining")
                             .overlay(alignment: .leading) {
-                                if showFindTip {
+                                if showStuckHint {
+                                    FeatureTip(text: "Stuck? Tap to find it")
+                                        .offset(x: -170)
+                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                } else if showFindTip {
                                     FeatureTip(text: "Find hidden regions")
                                         .offset(x: -160)
                                         .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -71,23 +81,55 @@ struct TodayView: View {
                             .transition(.opacity)
                         }
                     }
+                    .overlay(alignment: .bottomLeading) {
+                        if showDebugOverlay && store.phase == .painting {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Taps: \(store.tapCount)")
+                                Text("Grabbed: \(store.autoGrabbedCount)")
+                                Text("Elements: \(store.document.totalElements)")
+                                Text("Grab: \(store.debugDisableTinyGrab ? "OFF" : "ON")")
+                                    .foregroundStyle(store.debugDisableTinyGrab ? .red : .green)
+                            }
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding(8)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.6)))
+                            .padding(16)
+                            .onTapGesture {
+                                store.debugDisableTinyGrab.toggle()
+                            }
+                            .transition(.opacity)
+                        }
+                    }
                     .accessibilityLabel("Coloring canvas, \(store.document.title)")
                     .accessibilityHint("Tap colored regions to fill them")
 
-                // Palette — swatches animate away on completion but
-                // the container stays so the canvas doesn't jump.
-                PaletteView(
-                    groups: store.document.groups,
-                    selectedIndex: $store.selectedGroupIndex,
-                    filledElements: store.filledElements,
-                    justCompletedGroupIndex: store.justCompletedGroupIndex
-                )
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                // Palette bar — slides off bottom on completion
+                if !showCompletion {
+                    ZStack(alignment: .top) {
+                        PaletteView(
+                            groups: store.document.groups,
+                            selectedIndex: $store.selectedGroupIndex,
+                            filledElements: store.filledElements,
+                            justCompletedGroupIndex: store.justCompletedGroupIndex
+                        )
+
+                        if showPaletteTip {
+                            FeatureTip(text: "Tap a color to highlight its pieces")
+                                .offset(y: -28)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
-                    if phase == .complete { beginCompletionSequence() }
+                    if phase == .complete {
+                        stuckTimer?.invalidate(); stuckTimer = nil
+                        showStuckHint = false
+                        beginCompletionSequence()
+                    }
                     if phase == .painting { resetCompletionSequence() }
                 }
             }
@@ -106,12 +148,14 @@ struct TodayView: View {
                 .transition(.opacity)
             }
 
-            // Header — above completion overlay so buttons stay tappable
-            VStack {
+            // Header — pinned to top, above completion overlay so buttons stay tappable
+            VStack(spacing: 0) {
                 header
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-                Spacer()
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
+                    .background(Color.black)
+                Color.clear
+                    .allowsHitTesting(false)
             }
 
             // First-run onboarding
@@ -167,6 +211,22 @@ struct TodayView: View {
                     findTipShown = true
                 }
             }
+            // Stuck hint: reset on any fill, re-arm if few pieces remain
+            withAnimation(.easeOut(duration: 0.2)) { showStuckHint = false }
+            armStuckTimer()
+        }
+        .onChange(of: store.justCompletedGroupIndex) { _, newVal in
+            // Palette tip: after first group completion, hint that tapping a color highlights
+            if !paletteTipShown, newVal != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    guard !paletteTipShown else { return }
+                    withAnimation(.easeOut(duration: 0.4)) { showPaletteTip = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                        withAnimation(.easeOut(duration: 0.3)) { showPaletteTip = false }
+                        paletteTipShown = true
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store)
@@ -192,11 +252,19 @@ struct TodayView: View {
     private var header: some View {
         HStack {
             if !isOnTodayArtwork {
-                Button { store.loadArtwork(at: Artwork.today().index) } label: {
+                Button {
+                    let todayIdx = Artwork.today().index
+                    skipReveal = true  // instant overlay when returning to completed artwork
+                    store.loadArtwork(at: todayIdx)
+                    // Refresh completion count so user sees latest stats
+                    Task { await CompletionService.shared.fetchCount(artworkID: Artwork.catalog[todayIdx].id) }
+                    Task { await CompletionService.shared.fetchCountryFlags(artworkID: Artwork.catalog[todayIdx].id) }
+                } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.trailing, 4)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
@@ -208,6 +276,15 @@ struct TodayView: View {
                     Text(store.document.title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
+                        // DEBUG: triple-tap title to preview completion overlay
+                        .onTapGesture(count: 3) {
+                            skipReveal = true
+                            withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
+                        }
+                        // DEBUG: long-press title to toggle tap counter overlay
+                        .onLongPressGesture {
+                            withAnimation { showDebugOverlay.toggle() }
+                        }
 
                     if store.phase == .complete {
                         Image(systemName: "checkmark")
@@ -226,12 +303,14 @@ struct TodayView: View {
 
             Spacer()
 
+            #if DEBUG
             if store.phase == .painting {
                 Text(store.progressText)
                     .font(.system(size: 14, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.5))
                     .transition(.opacity)
             }
+            #endif
 
             if store.phase == .painting && store.peekUsesRemaining > 0 {
                 Button {
@@ -298,9 +377,11 @@ struct TodayView: View {
         withAnimation(.easeOut(duration: 0.2)) {
             showPeekTip = false
             showFindTip = false
+            showPaletteTip = false
         }
         peekTipShown = true
         findTipShown = true
+        paletteTipShown = true
     }
 
     private var todayDateString: String {
@@ -310,9 +391,31 @@ struct TodayView: View {
         return formatter.string(from: Date())
     }
 
+    /// Arms a timer that shows the "stuck" tooltip on the scope button after
+    /// 8 seconds of inactivity, but only when few pieces remain in the artwork.
+    private func armStuckTimer() {
+        stuckTimer?.invalidate()
+        stuckTimer = nil
+        // Only arm when few pieces remain globally and there are find uses left
+        guard store.phase == .painting,
+              store.globalRemaining > 0,
+              store.globalRemaining <= 5,
+              store.findUsesRemaining > 0 else { return }
+        stuckTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { _ in
+            Task { @MainActor in
+                guard store.phase == .painting, store.globalRemaining > 0 else { return }
+                withAnimation(.easeOut(duration: 0.4)) { showStuckHint = true }
+                // Auto-dismiss after 6s if not acted on
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                    withAnimation(.easeOut(duration: 0.3)) { showStuckHint = false }
+                }
+            }
+        }
+    }
+
     private var hasUnfilledInSelectedGroup: Bool {
-        guard store.selectedGroupIndex < store.document.groups.count else { return false }
-        let group = store.document.groups[store.selectedGroupIndex]
+        guard let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count else { return false }
+        let group = store.document.groups[selIdx]
         return group.elementIndices.contains(where: { !store.filledElements.contains($0) })
     }
 
@@ -332,7 +435,14 @@ struct TodayView: View {
 
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
-        skipReveal = false  // fresh completion → animate the reveal
+
+        if skipReveal {
+            // Returning to an already-completed artwork — show overlay immediately
+            withAnimation(.easeOut(duration: 0.3)) { showCompletion = true }
+            return
+        }
+
+        // Fresh completion — full celebratory reveal
 
         // 0.0s — Canvas freezes (phase = .complete disables gestures).
         //        Numbers dissolve (CanvasView handles this, ~1s).
@@ -366,12 +476,13 @@ struct TodayView: View {
                 SVGCanvasRenderer(
                     document: store.document,
                     filledElements: allFilled,
-                    selectedGroupIndex: 0,
+                    selectedGroupIndex: nil,
                     showNumbers: false,
                     isPeeking: false,
                     zoomLevel: 1.0,
                     activeAnimations: [],
-                    flashTick: 0
+                    flashTick: 0,
+                    pulsePhase: 0
                 )
                 .frame(width: canvasWidth, height: canvasHeight)
 

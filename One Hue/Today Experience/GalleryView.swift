@@ -233,12 +233,13 @@ private struct GalleryCell: View {
                             SVGCanvasRenderer(
                                 document: doc,
                                 filledElements: Set(0..<doc.totalElements),
-                                selectedGroupIndex: 0,
+                                selectedGroupIndex: nil,
                                 showNumbers: false,
                                 isPeeking: false,
                                 zoomLevel: 1.0,
                                 activeAnimations: [],
-                                flashTick: 0
+                                flashTick: 0,
+                                pulsePhase: 0
                             )
                             .drawingGroup()
                         }

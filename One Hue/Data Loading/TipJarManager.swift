@@ -14,6 +14,7 @@ final class TipJarManager: ObservableObject {
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var purchaseState: PurchaseState = .idle
+    @Published private(set) var didFinishLoading = false
 
     enum PurchaseState: Equatable {
         case idle
@@ -42,6 +43,7 @@ final class TipJarManager: ObservableObject {
         } catch {
             // Products stay empty — tip jar section won't show
         }
+        didFinishLoading = true
     }
 
     // MARK: - Purchase

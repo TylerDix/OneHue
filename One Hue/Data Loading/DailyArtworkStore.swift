@@ -10,10 +10,13 @@ final class ColoringStore: ObservableObject {
 
     @Published private(set) var document: SVGDocument
     @Published private(set) var phase: ArtworkPhase = .painting
-    @Published var selectedGroupIndex: Int = 0
+    @Published var selectedGroupIndex: Int? = nil
     @Published private(set) var justCompletedGroupIndex: Int? = nil
     @Published private(set) var isPeeking: Bool = false
     @Published private(set) var peekUsesRemaining: Int = maxPeeksPerGame
+    /// Incremented when the user re-taps an already-selected palette swatch,
+    /// triggering a pulse flash in CanvasView even though selectedGroupIndex didn't change.
+    @Published var pulseTrigger: UInt = 0
     static let maxPeeksPerGame = 3
 
     @Published private(set) var filledElements: Set<Int> = [] {
@@ -57,11 +60,14 @@ final class ColoringStore: ObservableObject {
         "\(filledElements.count) / \(document.totalElements)"
     }
 
-    var selectedGroup: SVGColorGroup {
-        guard selectedGroupIndex < document.groups.count else {
-            return document.groups[0]  // sentinel fallback
-        }
-        return document.groups[selectedGroupIndex]
+    /// Number of grouped elements still unfilled across the entire artwork.
+    var globalRemaining: Int {
+        document.groupedIndices.subtracting(filledElements).count
+    }
+
+    var selectedGroup: SVGColorGroup? {
+        guard let idx = selectedGroupIndex, idx < document.groups.count else { return nil }
+        return document.groups[idx]
     }
 
     // MARK: - Available Artworks
@@ -86,7 +92,8 @@ final class ColoringStore: ObservableObject {
         self.document = doc
         self.spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         self.filledElements = Self.loadProgress(for: doc.id)
-        self.selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
+        // Fresh artwork: no color selected (user picks). Resume: auto-select largest group.
+        self.selectedGroupIndex = filledElements.isEmpty ? nil : Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
 
         if filledElements.count >= doc.totalElements && doc.totalElements > 0 {
             phase = .complete
@@ -103,6 +110,8 @@ final class ColoringStore: ObservableObject {
         completionPending = false
         findUsesRemaining = Self.maxFindsPerGame
         peekUsesRemaining = Self.maxPeeksPerGame
+        tapCount = 0
+        autoGrabbedCount = 0
         isPeeking = false
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
@@ -113,7 +122,7 @@ final class ColoringStore: ObservableObject {
         document = doc
         spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         filledElements = Self.loadProgress(for: doc.id)
-        selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
+        selectedGroupIndex = filledElements.isEmpty ? nil : Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
         phase = (filledElements.count >= doc.totalElements && doc.totalElements > 0) ? .complete : .painting
     }
 
@@ -151,7 +160,8 @@ final class ColoringStore: ObservableObject {
         guard !filledElements.contains(elementIndex) else { return .alreadyFilled }
 
         let groupIdx = document.elementGroupMap[elementIndex] ?? -1
-        guard groupIdx == selectedGroupIndex,
+        guard let selected = selectedGroupIndex,
+              groupIdx == selected,
               groupIdx < document.groups.count else { return .wrongGroup }
 
         // Fill entire cluster containing the tapped element
@@ -160,8 +170,15 @@ final class ColoringStore: ObservableObject {
             toFill.formUnion(document.clusters[clusterIdx].elementIndices)
         }
 
+        let clusterCount = toFill.count
+
         // Also collect tiny neighbors near any element in the filled cluster
-        collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
+        if !debugDisableTinyGrab {
+            collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
+        }
+
+        autoGrabbedCount += toFill.count - clusterCount
+        tapCount += 1
 
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
@@ -179,19 +196,18 @@ final class ColoringStore: ObservableObject {
         // At 95%+ global, sweep remaining tiny elements across all groups
         autoSweepTinyRemnants()
 
-        // Global auto-complete: if only a handful of elements remain across the
-        // entire artwork, fill them all so users never get stuck on invisible pixels.
-        autoCompleteGlobalIfNearlyDone()
-
-        // Auto-advance to next incomplete group
+        // Celebrate group completion — user picks next color manually (like HC)
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
             justCompletedGroupIndex = groupIdx
-            advanceToNextIncompleteGroup()
-            // Clear after palette has time to show checkmark
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            // Clear after palette celebrates the completion, then deselect
+            // so all numbers reappear and user picks the next color
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
                 guard self?.justCompletedGroupIndex == groupIdx else { return }
                 self?.justCompletedGroupIndex = nil
+                if self?.selectedGroupIndex == groupIdx {
+                    self?.selectedGroupIndex = nil
+                }
             }
         }
 
@@ -199,9 +215,10 @@ final class ColoringStore: ObservableObject {
     }
 
     private func advanceToNextIncompleteGroup() {
+        guard let current = selectedGroupIndex else { return }
         let count = document.groups.count
         for offset in 1...count {
-            let idx = (selectedGroupIndex + offset) % count
+            let idx = (current + offset) % count
             let group = document.groups[idx]
             if group.elementIndices.contains(where: { !filledElements.contains($0) }) {
                 selectedGroupIndex = idx
@@ -283,12 +300,14 @@ final class ColoringStore: ObservableObject {
         let leftover = document.groupedIndices.subtracting(filledElements)
         guard !leftover.isEmpty else { return }
 
-        // Only auto-complete if every remaining element is tiny
+        // Auto-complete if: all remaining are tiny, OR only 1-2 left (don't
+        // make the user hunt for the very last pieces — just finish it).
+        let fewEnoughToFinish = leftover.count <= 2
         let allTiny = leftover.allSatisfy { idx in
             let el = document.elements[idx]
             return min(el.bounds.width, el.bounds.height) < tinyThreshold
         }
-        guard allTiny else { return }
+        guard fewEnoughToFinish || allTiny else { return }
 
         startFinishingFill(indices: Array(leftover))
     }
@@ -325,21 +344,27 @@ final class ColoringStore: ObservableObject {
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny".
     /// Scaled by artwork complexity so easy artworks don't auto-grab too many cells.
-    static let tinyThresholdMax: CGFloat = 90
+    /// iPad uses halved thresholds so more pieces remain for the user to "hunt."
+    static let tinyThresholdMax: CGFloat = 50
+    private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
     private var tinyThreshold: CGFloat {
         let total = document.totalElements
-        if total <= 50  { return 25 }
-        if total <= 100 { return 45 }
-        if total <= 200 { return 65 }
-        return Self.tinyThresholdMax
+        let base: CGFloat
+        if total <= 50  { base = 15 }
+        else if total <= 100 { base = 25 }
+        else if total <= 200 { base = 35 }
+        else { base = Self.tinyThresholdMax }
+        return Self.isIPad ? base * 0.5 : base
     }
     /// How far (SVG units) to look for adjacent tiny elements
     private var neighborMargin: CGFloat {
         let total = document.totalElements
-        if total <= 50  { return 10 }
-        if total <= 100 { return 20 }
-        if total <= 200 { return 30 }
-        return 45
+        let base: CGFloat
+        if total <= 50  { base = 5 }
+        else if total <= 100 { base = 10 }
+        else if total <= 200 { base = 15 }
+        else { base = 20 }
+        return Self.isIPad ? base * 0.5 : base
     }
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group
@@ -407,6 +432,20 @@ final class ColoringStore: ObservableObject {
     static let maxFindsPerGame = 4
     @Published private(set) var findUsesRemaining: Int = maxFindsPerGame
 
+    // MARK: - Debug / Testing
+
+    /// Running count of user taps (tryFill calls that result in .filled).
+    @Published private(set) var tapCount: Int = 0
+    /// Total elements filled by tiny-neighbor auto-grab (not direct taps).
+    @Published private(set) var autoGrabbedCount: Int = 0
+
+    /// When true, skips the tiny-neighbor BFS so each tap only fills its cluster.
+    /// Toggle via debug triple-tap on the tap counter overlay.
+    var debugDisableTinyGrab: Bool {
+        get { UserDefaults.standard.bool(forKey: "onehue.debug.disableTinyGrab") }
+        set { UserDefaults.standard.set(newValue, forKey: "onehue.debug.disableTinyGrab"); objectWillChange.send() }
+    }
+
     /// Maximum number of find-targets per color group. Prioritises the
     /// largest clusters so the finder highlights meaningful regions first
     /// and skips tiny specks that are tedious to hunt for.
@@ -418,14 +457,16 @@ final class ColoringStore: ObservableObject {
     func findNextUnfilled() {
         guard findUsesRemaining > 0 else { return }
 
-        if selectedGroupIndex != lastFindGroup {
+        guard let selected = selectedGroupIndex else { return }
+
+        if selected != lastFindGroup {
             findCycleIndex = 0
-            lastFindGroup = selectedGroupIndex
+            lastFindGroup = selected
         }
 
         let unfilledClusters = document.clusters
             .filter { cluster in
-                cluster.groupIndex == selectedGroupIndex &&
+                cluster.groupIndex == selected &&
                 cluster.elementIndices.contains(where: { !filledElements.contains($0) })
             }
             .sorted { $0.bounds.width * $0.bounds.height > $1.bounds.width * $1.bounds.height }
@@ -524,14 +565,14 @@ final class ColoringStore: ObservableObject {
             autoCompleteEnabled = false
             return
         }
-        guard selectedGroupIndex < document.groups.count else { return }
-        let group = document.groups[selectedGroupIndex]
+        guard let selected = selectedGroupIndex, selected < document.groups.count else { return }
+        let group = document.groups[selected]
         if let nextIdx = group.elementIndices.first(where: { !filledElements.contains($0) }) {
             tryFill(elementIndex: nextIdx)
         } else {
             advanceToNextIncompleteGroup()
-            guard selectedGroupIndex < document.groups.count else { return }
-            let newGroup = document.groups[selectedGroupIndex]
+            guard let newSelected = selectedGroupIndex, newSelected < document.groups.count else { return }
+            let newGroup = document.groups[newSelected]
             if let nextIdx = newGroup.elementIndices.first(where: { !filledElements.contains($0) }) {
                 tryFill(elementIndex: nextIdx)
             }

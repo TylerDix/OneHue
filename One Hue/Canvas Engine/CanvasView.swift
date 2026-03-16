@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import QuartzCore
 
 // MARK: - Fill Animation Model
@@ -39,8 +40,15 @@ struct CanvasView: View {
     @State private var animationLink: CADisplayLink?
     @State private var animationTarget: DisplayLinkTarget?
 
+    // Pulse guide — breathing glow on largest unfilled cluster
+    @State private var pulsePhase: Double = 0
+    @State private var pulseTimer: Timer?
+
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
+    private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+    /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
+    private var defaultZoom: CGFloat { Self.isIPad ? 1.5 : 1.0 }
 
     private var contentOverflows: Bool {
         guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
@@ -62,7 +70,8 @@ struct CanvasView: View {
                     isPeeking: store.isPeeking,
                     zoomLevel: currentZoom,
                     activeAnimations: activeAnimations,
-                    flashTick: flashTick
+                    flashTick: flashTick,
+                    pulsePhase: pulsePhase
                 )
                 .frame(width: renderSize.width, height: renderSize.height)
 
@@ -79,6 +88,10 @@ struct CanvasView: View {
             .onAppear {
                 viewportSize = geo.size
                 currentRenderSize = renderSize
+                // iPad starts zoomed so artwork fills the large screen
+                if Self.isIPad {
+                    currentZoom = defaultZoom; lastZoom = defaultZoom
+                }
             }
             .onChange(of: geo.size) { _, newSize in
                 viewportSize = newSize
@@ -97,21 +110,42 @@ struct CanvasView: View {
         }
         .onChange(of: store.filledElements) { oldValue, newValue in
             let added = newValue.subtracting(oldValue)
-            guard !added.isEmpty, let origin = blobOrigin else { return }
-            let maxRadius = blobMaxRadius(from: origin, elements: added)
+            guard !added.isEmpty else { return }
 
-            let animation = FillAnimation(
-                origin: origin,
-                startTime: Date(),
-                maxRadius: maxRadius,
-                elementIndices: added
-            )
-            activeAnimations.append(animation)
-            startAnimationLoop()
-            blobOrigin = nil
+            // Blob animation
+            if let origin = blobOrigin {
+                let maxRadius = blobMaxRadius(from: origin, elements: added)
+                let animation = FillAnimation(
+                    origin: origin,
+                    startTime: Date(),
+                    maxRadius: maxRadius,
+                    elementIndices: added
+                )
+                activeAnimations.append(animation)
+                startAnimationLoop()
+                blobOrigin = nil
+            }
+
+            // If the selected group just dropped to few remaining, kick into
+            // continuous pulse mode so stragglers are easy to find
+            if let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count {
+                let group = store.document.groups[selIdx]
+                let remaining = group.elementIndices.filter { !newValue.contains($0) }.count
+                if remaining > 0 && remaining <= 5 && pulseTimer == nil {
+                    startPulse()
+                }
+            }
         }
-        .onAppear { animate(to: store.phase) }
-        .onDisappear { stopAnimationLoop() }
+        .onChange(of: store.selectedGroupIndex) { _, _ in startPulse() }
+        .onChange(of: store.pulseTrigger) { _, _ in startPulse() }
+        .onAppear {
+            animate(to: store.phase)
+            startPulse()
+        }
+        .onDisappear {
+            stopAnimationLoop()
+            pulseTimer?.invalidate(); pulseTimer = nil
+        }
     }
 
     // MARK: - Phase Animation
@@ -121,6 +155,8 @@ struct CanvasView: View {
         case .painting:
             withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
                 showNumbers = true
+                currentZoom = defaultZoom; lastZoom = defaultZoom
+                offset = .zero; lastOffset = .zero
             }
 
         case .complete:
@@ -177,10 +213,12 @@ struct CanvasView: View {
     }
 
     private func attemptFill(at loc: CGPoint, viewportSize: CGSize, renderSize: CGSize) {
+        guard let selected = store.selectedGroupIndex else { return }
+
         // Try exact hit
         if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
             let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
-            let isCorrect = groupIdx == store.selectedGroupIndex
+            let isCorrect = groupIdx == selected
             let needsFill = !store.filledElements.contains(hit.elementIndex)
 
             if isCorrect && needsFill {
@@ -192,7 +230,7 @@ struct CanvasView: View {
 
         // Exact hit missed or wrong color — try color snap
         let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
-        if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
+        if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: selected) {
             blobOrigin = svg
             store.tryFill(elementIndex: snapIdx)
         }
@@ -206,7 +244,7 @@ struct CanvasView: View {
 
     /// How far (in SVG units) to search for a same-color unfilled element
     /// when the exact tap misses or hits a wrong-color element.
-    private static let colorSnapRadiusBase: CGFloat = 120
+    private static let colorSnapRadiusBase: CGFloat = 50
 
     /// Transform a screen point (in viewport space) to SVG coordinate space.
     private func screenToSVGPoint(_ point: CGPoint, viewportSize: CGSize, renderSize: CGSize) -> CGPoint {
@@ -258,9 +296,9 @@ struct CanvasView: View {
             // Matches the boosted minimum from the rendering pass so
             // pill-backed labels are as easy to tap as they look.
             let dim = min(cluster.bounds.width, cluster.bounds.height)
-            let isSelectedCluster = cluster.groupIndex == store.selectedGroupIndex
-            let fontSize = max(min(dim * 0.35, 60), isSelectedCluster ? 18 : 10)
-            let hitRadius = max(fontSize * 1.0, 24)
+            let isSelectedCluster = store.selectedGroupIndex.map { cluster.groupIndex == $0 } ?? false
+            let fontSize = max(min(dim * 0.35, 60), isSelectedCluster ? 24 : 10)
+            let hitRadius = max(fontSize * 1.2, 30)
 
             if dist < hitRadius, dist < bestLabelDist {
                 bestLabelDist = dist
@@ -460,9 +498,10 @@ struct CanvasView: View {
         return maxDist
     }
 
-    private func resetZoom(to zoom: CGFloat = 1.0) {
+    private func resetZoom(to zoom: CGFloat? = nil) {
+        let z = zoom ?? defaultZoom
         withAnimation(.easeInOut(duration: 0.3)) {
-            currentZoom = zoom; lastZoom = zoom
+            currentZoom = z; lastZoom = z
             offset = .zero; lastOffset = .zero
         }
     }
@@ -503,6 +542,39 @@ struct CanvasView: View {
         animationLink?.invalidate()
         animationLink = nil
         animationTarget = nil
+    }
+
+    // MARK: - Pulse Guide
+
+    /// Starts a breathing glow on the largest unfilled cluster.
+    /// Runs for 3 seconds normally, or indefinitely when few pieces remain
+    /// (the "where are the stragglers?" mode).
+    private func startPulse() {
+        pulseTimer?.invalidate()
+        pulsePhase = 0
+
+        // Check if the selected group is nearly done — if so, pulse indefinitely
+        let nearlyDone: Bool = {
+            guard let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count else { return false }
+            let group = store.document.groups[selIdx]
+            let remaining = group.elementIndices.filter { !store.filledElements.contains($0) }.count
+            return remaining > 0 && remaining <= 5
+        }()
+
+        // ~30 fps
+        var ticks = 0
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [self] timer in
+            ticks += 1
+            Task { @MainActor in
+                pulsePhase = Double(ticks) / 30.0  // seconds elapsed
+                // 3-second pulse normally; indefinite when nearly done
+                if !nearlyDone && ticks >= 90 {
+                    timer.invalidate()
+                    pulseTimer = nil
+                    pulsePhase = 0
+                }
+            }
+        }
     }
 
     // MARK: - Find / Zoom-to-Target
@@ -555,20 +627,22 @@ struct CanvasView: View {
 struct SVGCanvasRenderer: View {
     let document: SVGDocument
     let filledElements: Set<Int>
-    let selectedGroupIndex: Int
+    let selectedGroupIndex: Int?
     let showNumbers: Bool
     let isPeeking: Bool
     let zoomLevel: CGFloat
     let activeAnimations: [FillAnimation]
     let flashTick: UInt  // drives re-renders during blob animation
+    let pulsePhase: Double  // 0 = no pulse, >0 = seconds into breathing animation
 
     private static let blobDuration: TimeInterval = 0.6
 
     // MARK: - Checkerboard Tile
 
-    /// 48×48 px checkerboard image (24 SVG-unit cells when drawn at scale 1)
+    /// 24×24 px checkerboard image (12 SVG-unit cells — tight pattern that
+    /// reads as texture without blending into light-colored regions)
     private static let checkerImage: Image = {
-        let cell = 24
+        let cell = 12
         let size = cell * 2
         let space = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(
@@ -578,7 +652,7 @@ struct SVGCanvasRenderer: View {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return Image(systemName: "checkerboard.rectangle") }
         ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.15))
+        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.10))
         ctx.fill(CGRect(x: 0, y: 0, width: cell, height: cell))
         ctx.fill(CGRect(x: cell, y: cell, width: cell, height: cell))
         guard let cgImage = ctx.makeImage() else { return Image(systemName: "checkerboard.rectangle") }
@@ -684,9 +758,24 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
+            // Pass 1.5: Subtle boundary hairlines on unfilled regions.
+            // Gives consistent visual structure regardless of art style.
+            if !isPeeking {
+                let hairlineWidth: CGFloat = 0.5
+                let hairlineStyle = StrokeStyle(lineWidth: hairlineWidth, lineJoin: .round)
+                for element in document.elements {
+                    guard !filledElements.contains(element.id) else { continue }
+                    guard document.elementGroupMap[element.id] != nil else { continue }
+                    let path = Path(element.path)
+                    let isSelected = document.elementGroupMap[element.id] == selectedGroupIndex
+                    let opacity = isSelected ? 0.15 : 0.07
+                    ctx.stroke(path, with: .color(.white.opacity(opacity)), style: hairlineStyle)
+                }
+            }
+
             // Pass 2: Checkerboard on selected group's unfilled elements
-            if showNumbers, !isPeeking, selectedGroupIndex < document.groups.count {
-                let selectedGroup = document.groups[selectedGroupIndex]
+            if showNumbers, !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
+                let selectedGroup = document.groups[selIdx]
                 var combinedPath = Path()
                 for idx in selectedGroup.elementIndices {
                     guard !filledElements.contains(idx) else { continue }
@@ -709,14 +798,32 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 3: Number labels — Happy Color style.
-            // Only the selected group's numbers show. Always visible, even zoomed out.
-            if showNumbers, !isPeeking {
-                let fullVisible: CGFloat = 14
+            // Pass 2.5: Breathing pulse on ALL unfilled regions of the selected group.
+            // Flashes every remaining piece so the user can spot stragglers at any zoom.
+            if pulsePhase > 0, !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
+                let selectedGroup = document.groups[selIdx]
 
-                // Minimum screen-point floor — labels are always at least this big on screen
-                let minScreenPt: CGFloat = 12
-                let screenFloor = minScreenPt / max(scale * zoomLevel, 0.001)
+                // Breathing sine wave: 0→1→0 over ~1.5s, repeated
+                let breath = sin(pulsePhase * .pi * 1.3)
+                let alpha = max(breath, 0) * 0.55  // peak 55% — must pop even on light colors
+
+                // Build combined path from ALL unfilled elements in the selected group
+                var allUnfilledPath = Path()
+                for idx in selectedGroup.elementIndices where !filledElements.contains(idx) {
+                    allUnfilledPath.addPath(Path(document.elements[idx].path))
+                }
+
+                if !allUnfilledPath.isEmpty {
+                    ctx.fill(allUnfilledPath, with: .color(selectedGroup.color.opacity(alpha)))
+                }
+            }
+
+            // Pass 3: Number labels. When no color selected, show all groups
+            // with relaxed zoom threshold so numbers are visible at 1x.
+            if showNumbers, !isPeeking {
+                let showAllGroups = selectedGroupIndex == nil
+                let minVisible: CGFloat = showAllGroups ? 3 : 8
+                let fullVisible: CGFloat = showAllGroups ? 6 : 14
 
                 struct LabelInfo {
                     let center: CGPoint
@@ -729,25 +836,28 @@ struct SVGCanvasRenderer: View {
 
                 var labels: [LabelInfo] = []
 
-                let groupNumber = selectedGroupIndex < document.groups.count
-                    ? document.groups[selectedGroupIndex].id + 1
-                    : selectedGroupIndex + 1
-
                 for cluster in document.clusters {
-                    guard cluster.groupIndex == selectedGroupIndex else { continue }
+                    if let selIdx = selectedGroupIndex {
+                        guard cluster.groupIndex == selIdx else { continue }
+                    }
                     let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                     guard hasUnfilled else { continue }
 
+                    let groupNumber = cluster.groupIndex < document.groups.count
+                        ? document.groups[cluster.groupIndex].id + 1
+                        : cluster.groupIndex + 1
+
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
                     let naturalSize = min(dim * 0.35, 60)
+                    let fontSize = max(naturalSize, CGFloat(24))
+                    let needsPill = naturalSize < 24
 
-                    // Ensure label is always at least minScreenPt on screen
-                    let boostedMin = max(CGFloat(18), screenFloor)
-                    let fontSize = max(naturalSize, boostedMin)
-                    let needsPill = naturalSize < boostedMin
-
+                    // Numbers require a bit of zoom to appear — you search the
+                    // artwork by color/tint first, numbers confirm when close.
                     let screenPt = fontSize * scale * zoomLevel
-                    let sizeAlpha = min(screenPt / fullVisible, 1.0)
+                    guard screenPt >= minVisible else { continue }
+
+                    let sizeAlpha = min((screenPt - minVisible) / (fullVisible - minVisible), 1.0)
                     let area = cluster.bounds.width * cluster.bounds.height
 
                     labels.append(LabelInfo(
@@ -781,7 +891,7 @@ struct SVGCanvasRenderer: View {
 
                     placedRects.append(rect)
 
-                    let pillOpacity = label.needsPill ? 0.5 : 0.35
+                    let pillOpacity = label.needsPill ? 0.65 : 0.5
                     let pillW = label.fontSize * 1.1
                     let pillH = label.fontSize * 1.3
                     let pillRect = CGRect(
@@ -814,14 +924,15 @@ struct SVGCanvasRenderer: View {
         let baseBrightness = max(b, 0.35)
 
         if selected {
+            // Warm color whisper — clearly shows "this color goes here"
             return Color(hue: Double(h),
-                         saturation: Double(s * 0.35),
-                         brightness: Double(baseBrightness * 0.45))
+                         saturation: Double(s * 0.55),
+                         brightness: Double(baseBrightness * 0.65))
         } else {
-            // Dimmed further so the selected color's regions pop
+            // Nearly invisible — fades into the dark canvas
             return Color(hue: Double(h),
-                         saturation: Double(s * 0.1),
-                         brightness: Double(baseBrightness * 0.22))
+                         saturation: Double(s * 0.06),
+                         brightness: Double(baseBrightness * 0.15))
         }
     }
 }
