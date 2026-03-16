@@ -233,7 +233,7 @@ private struct GalleryCell: View {
                             SVGCanvasRenderer(
                                 document: doc,
                                 filledElements: Set(0..<doc.totalElements),
-                                selectedGroupIndex: 0,
+                                selectedGroupIndex: nil,
                                 showNumbers: false,
                                 isPeeking: false,
                                 zoomLevel: 1.0,

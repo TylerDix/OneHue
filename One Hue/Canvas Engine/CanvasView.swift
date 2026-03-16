@@ -128,8 +128,8 @@ struct CanvasView: View {
 
             // If the selected group just dropped to few remaining, kick into
             // continuous pulse mode so stragglers are easy to find
-            if store.selectedGroupIndex < store.document.groups.count {
-                let group = store.document.groups[store.selectedGroupIndex]
+            if let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count {
+                let group = store.document.groups[selIdx]
                 let remaining = group.elementIndices.filter { !newValue.contains($0) }.count
                 if remaining > 0 && remaining <= 5 && pulseTimer == nil {
                     startPulse()
@@ -213,10 +213,12 @@ struct CanvasView: View {
     }
 
     private func attemptFill(at loc: CGPoint, viewportSize: CGSize, renderSize: CGSize) {
+        guard let selected = store.selectedGroupIndex else { return }
+
         // Try exact hit
         if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
             let groupIdx = store.document.elementGroupMap[hit.elementIndex] ?? -1
-            let isCorrect = groupIdx == store.selectedGroupIndex
+            let isCorrect = groupIdx == selected
             let needsFill = !store.filledElements.contains(hit.elementIndex)
 
             if isCorrect && needsFill {
@@ -228,7 +230,7 @@ struct CanvasView: View {
 
         // Exact hit missed or wrong color — try color snap
         let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
-        if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: store.selectedGroupIndex) {
+        if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: selected) {
             blobOrigin = svg
             store.tryFill(elementIndex: snapIdx)
         }
@@ -294,7 +296,7 @@ struct CanvasView: View {
             // Matches the boosted minimum from the rendering pass so
             // pill-backed labels are as easy to tap as they look.
             let dim = min(cluster.bounds.width, cluster.bounds.height)
-            let isSelectedCluster = cluster.groupIndex == store.selectedGroupIndex
+            let isSelectedCluster = store.selectedGroupIndex.map { cluster.groupIndex == $0 } ?? false
             let fontSize = max(min(dim * 0.35, 60), isSelectedCluster ? 24 : 10)
             let hitRadius = max(fontSize * 1.2, 30)
 
@@ -553,8 +555,8 @@ struct CanvasView: View {
 
         // Check if the selected group is nearly done — if so, pulse indefinitely
         let nearlyDone: Bool = {
-            guard store.selectedGroupIndex < store.document.groups.count else { return false }
-            let group = store.document.groups[store.selectedGroupIndex]
+            guard let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count else { return false }
+            let group = store.document.groups[selIdx]
             let remaining = group.elementIndices.filter { !store.filledElements.contains($0) }.count
             return remaining > 0 && remaining <= 5
         }()
@@ -625,7 +627,7 @@ struct CanvasView: View {
 struct SVGCanvasRenderer: View {
     let document: SVGDocument
     let filledElements: Set<Int>
-    let selectedGroupIndex: Int
+    let selectedGroupIndex: Int?
     let showNumbers: Bool
     let isPeeking: Bool
     let zoomLevel: CGFloat
@@ -772,8 +774,8 @@ struct SVGCanvasRenderer: View {
             }
 
             // Pass 2: Checkerboard on selected group's unfilled elements
-            if showNumbers, !isPeeking, selectedGroupIndex < document.groups.count {
-                let selectedGroup = document.groups[selectedGroupIndex]
+            if showNumbers, !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
+                let selectedGroup = document.groups[selIdx]
                 var combinedPath = Path()
                 for idx in selectedGroup.elementIndices {
                     guard !filledElements.contains(idx) else { continue }
@@ -798,8 +800,8 @@ struct SVGCanvasRenderer: View {
 
             // Pass 2.5: Breathing pulse on ALL unfilled regions of the selected group.
             // Flashes every remaining piece so the user can spot stragglers at any zoom.
-            if pulsePhase > 0, !isPeeking, selectedGroupIndex < document.groups.count {
-                let selectedGroup = document.groups[selectedGroupIndex]
+            if pulsePhase > 0, !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
+                let selectedGroup = document.groups[selIdx]
 
                 // Breathing sine wave: 0→1→0 over ~1.5s, repeated
                 let breath = sin(pulsePhase * .pi * 1.3)
@@ -833,14 +835,19 @@ struct SVGCanvasRenderer: View {
 
                 var labels: [LabelInfo] = []
 
-                let groupNumber = selectedGroupIndex < document.groups.count
-                    ? document.groups[selectedGroupIndex].id + 1
-                    : selectedGroupIndex + 1
+                // When no color selected, show numbers for ALL groups so users can pick
+                let showAllGroups = selectedGroupIndex == nil
 
                 for cluster in document.clusters {
-                    guard cluster.groupIndex == selectedGroupIndex else { continue }
+                    if let selIdx = selectedGroupIndex {
+                        guard cluster.groupIndex == selIdx else { continue }
+                    }
                     let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                     guard hasUnfilled else { continue }
+
+                    let groupNumber = cluster.groupIndex < document.groups.count
+                        ? document.groups[cluster.groupIndex].id + 1
+                        : cluster.groupIndex + 1
 
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
                     let naturalSize = min(dim * 0.35, 60)

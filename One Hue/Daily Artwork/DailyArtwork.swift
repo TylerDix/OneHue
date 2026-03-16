@@ -14,7 +14,7 @@ extension Artwork {
 
     // MARK: - Curated Calendar
 
-    /// 284 artworks ordered chronologically (Jan → Dec).
+    /// 282 artworks ordered chronologically (Jan → Dec).
     /// Each artwork anchors to a specific (month, day) and remains the
     /// daily artwork until the next entry's date arrives.
     /// Placement reflects seasonal imagery, cultural resonance, and the
@@ -190,7 +190,6 @@ extension Artwork {
         Artwork(id: "trainStation",      fileName: "trainStation",       displayName: "Train Station",          completionMessage: "The clock only matters to the ones who haven't boarded yet.",                   month: 6,  day: 22),
         Artwork(id: "fishVillage",        fileName: "fishVillage",        displayName: "Fishing Village",        completionMessage: "The nets dry in the sun while the sea plans tomorrow.",                       month: 6,  day: 23),
         Artwork(id: "townChurch",         fileName: "townChurch",         displayName: "Town Church",            completionMessage: "The steeple points up so you don't have to.",                                 month: 6,  day: 24),
-        Artwork(id: "dockLanternNight",  fileName: "dockLanternNight",  displayName: "Dock Lantern Night",     completionMessage: "One light is enough when the water carries it twice.",                         month: 6,  day: 25),
 
                 // ── July — Peak summer, tropical ────────────────────────────
 
@@ -248,7 +247,6 @@ extension Artwork {
         Artwork(id: "pingFlamingo",       fileName: "pingFlamingo",       displayName: "Flamingo Pair",          completionMessage: "Pink is just confidence wearing feathers.",                                    month: 8,  day: 22),
         Artwork(id: "pirateShip",        fileName: "pirateShip",         displayName: "Pirate Ship",            completionMessage: "The skull and crossbones fly because someone chose the horizon over the harbor.", month: 8, day: 23),
         Artwork(id: "jelly",              fileName: "jelly",              displayName: "Jellyfish",              completionMessage: "Drifting is a decision the current made for both of you.",                     month: 8,  day: 24),
-        Artwork(id: "desertHighway",     fileName: "desertHighway",     displayName: "Desert Highway",         completionMessage: "The road stretches on because someone believed the horizon was worth reaching.", month: 8, day: 25),
 
                 // ── September — Transition, birds ───────────────────────────
 

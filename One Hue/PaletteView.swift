@@ -6,12 +6,18 @@ import SwiftUI
 struct PaletteView: View {
 
     let groups: [SVGColorGroup]
-    @Binding var selectedIndex: Int
+    @Binding var selectedIndex: Int?
     let filledElements: Set<Int>
     let justCompletedGroupIndex: Int?
     var onRetap: (() -> Void)? = nil
 
     @State private var hasAppeared = false
+
+    /// Fixed palette height so canvas doesn't jump when swatches appear/disappear.
+    private var paletteHeight: CGFloat {
+        let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 58 : 54
+        return size + 30  // swatch + ring + padding
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -38,7 +44,7 @@ struct PaletteView: View {
                             )
                             .transition(.asymmetric(
                                 insertion: .scale.combined(with: .opacity),
-                                removal: .offset(y: -80)
+                                removal: .scale(scale: 0.6)
                                     .combined(with: .opacity)
                             ))
                         }
@@ -49,11 +55,14 @@ struct PaletteView: View {
                 .padding(.vertical, 10)
             }
             .onChange(of: selectedIndex) { _, newIdx in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    proxy.scrollTo(newIdx, anchor: .center)
+                if let idx = newIdx {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(idx, anchor: .center)
+                    }
                 }
             }
         }
+        .frame(height: paletteHeight)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 hasAppeared = true
@@ -82,8 +91,10 @@ struct PaletteView: View {
 
         Button {
             if group.id == selectedIndex {
-                // Re-tap — flash the remaining pieces
-                onRetap?()
+                // Deselect — shows all numbers so user can pick a different color
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedIndex = nil
+                }
             } else {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     selectedIndex = group.id
@@ -103,7 +114,7 @@ struct PaletteView: View {
                             )
                     )
 
-                // Progress ring — snaps to full on completion
+                // Progress ring — smooth arc to full on completion
                 Circle()
                     .trim(from: 0, to: justCompleted ? 1.0 : progress)
                     .stroke(
@@ -113,7 +124,16 @@ struct PaletteView: View {
                     .frame(width: size + 6, height: size + 6)
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.3), value: progress)
-                    .animation(.easeOut(duration: 0.4), value: justCompleted)
+                    .animation(.easeOut(duration: 0.5), value: justCompleted)
+
+                // Completion glow ring — soft radiance on complete
+                if justCompleted {
+                    Circle()
+                        .strokeBorder(ringColor.opacity(0.5), lineWidth: 2)
+                        .frame(width: size + 16, height: size + 16)
+                        .shadow(color: ringColor.opacity(0.6), radius: 8, x: 0, y: 0)
+                        .transition(.opacity)
+                }
 
                 // Selection ring — color-matched
                 if isSelected && !justCompleted {
@@ -123,13 +143,17 @@ struct PaletteView: View {
                         .shadow(color: ringColor.opacity(0.4), radius: 5, x: 0, y: 0)
                 }
 
-                // Completion checkmark replaces number, same size
+                // Completion checkmark replaces number with spring bounce
                 if justCompleted {
                     Image(systemName: "checkmark")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(labelColor)
                         .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
-                        .transition(.scale.combined(with: .opacity))
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.3).combined(with: .opacity)
+                                .animation(.spring(response: 0.4, dampingFraction: 0.5)),
+                            removal: .opacity
+                        ))
                 } else {
                     // Group number
                     Text("\(group.id + 1)")
@@ -143,9 +167,11 @@ struct PaletteView: View {
                         )
                 }
             }
-            .scaleEffect(isSelected && !justCompleted ? 1.12 : 1.0)
-            .animation(.easeOut(duration: 0.2), value: isSelected)
-            .animation(.easeOut(duration: 0.2), value: justCompleted)
+            // Subtle lift for selected swatch — rises slightly without affecting neighbors
+            .offset(y: isSelected && !justCompleted ? -6 : 0)
+            .scaleEffect(justCompleted ? 1.15 : (isSelected ? 1.08 : 1.0))
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: justCompleted)
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
         }
         .buttonStyle(.plain)
         .disabled(justCompleted)
@@ -206,7 +232,7 @@ struct PaletteView: View {
     let store = ColoringStore()
     return PaletteView(
         groups: store.document.groups,
-        selectedIndex: .constant(0),
+        selectedIndex: .constant(nil),
         filledElements: store.filledElements,
         justCompletedGroupIndex: nil
     )

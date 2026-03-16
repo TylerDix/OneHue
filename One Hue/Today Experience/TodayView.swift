@@ -254,7 +254,14 @@ struct TodayView: View {
     private var header: some View {
         HStack {
             if !isOnTodayArtwork {
-                Button { store.loadArtwork(at: Artwork.today().index) } label: {
+                Button {
+                    let todayIdx = Artwork.today().index
+                    skipReveal = true  // instant overlay when returning to completed artwork
+                    store.loadArtwork(at: todayIdx)
+                    // Refresh completion count so user sees latest stats
+                    Task { await CompletionService.shared.fetchCount(artworkID: Artwork.catalog[todayIdx].id) }
+                    Task { await CompletionService.shared.fetchCountryFlags(artworkID: Artwork.catalog[todayIdx].id) }
+                } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.5))
@@ -406,8 +413,8 @@ struct TodayView: View {
     }
 
     private var hasUnfilledInSelectedGroup: Bool {
-        guard store.selectedGroupIndex < store.document.groups.count else { return false }
-        let group = store.document.groups[store.selectedGroupIndex]
+        guard let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count else { return false }
+        let group = store.document.groups[selIdx]
         return group.elementIndices.contains(where: { !store.filledElements.contains($0) })
     }
 
@@ -427,7 +434,14 @@ struct TodayView: View {
 
     private func beginCompletionSequence() {
         guard !showCompletion else { return }
-        skipReveal = false  // fresh completion → animate the reveal
+
+        if skipReveal {
+            // Returning to an already-completed artwork — show overlay immediately
+            withAnimation(.easeOut(duration: 0.3)) { showCompletion = true }
+            return
+        }
+
+        // Fresh completion — full celebratory reveal
 
         // 0.0s — Canvas freezes (phase = .complete disables gestures).
         //        Numbers dissolve (CanvasView handles this, ~1s).
@@ -461,7 +475,7 @@ struct TodayView: View {
                 SVGCanvasRenderer(
                     document: store.document,
                     filledElements: allFilled,
-                    selectedGroupIndex: 0,
+                    selectedGroupIndex: nil,
                     showNumbers: false,
                     isPeeking: false,
                     zoomLevel: 1.0,

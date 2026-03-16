@@ -10,7 +10,7 @@ final class ColoringStore: ObservableObject {
 
     @Published private(set) var document: SVGDocument
     @Published private(set) var phase: ArtworkPhase = .painting
-    @Published var selectedGroupIndex: Int = 0
+    @Published var selectedGroupIndex: Int? = nil
     @Published private(set) var justCompletedGroupIndex: Int? = nil
     @Published private(set) var isPeeking: Bool = false
     @Published private(set) var peekUsesRemaining: Int = maxPeeksPerGame
@@ -65,11 +65,9 @@ final class ColoringStore: ObservableObject {
         document.groupedIndices.subtracting(filledElements).count
     }
 
-    var selectedGroup: SVGColorGroup {
-        guard selectedGroupIndex < document.groups.count else {
-            return document.groups[0]  // sentinel fallback
-        }
-        return document.groups[selectedGroupIndex]
+    var selectedGroup: SVGColorGroup? {
+        guard let idx = selectedGroupIndex, idx < document.groups.count else { return nil }
+        return document.groups[idx]
     }
 
     // MARK: - Available Artworks
@@ -94,7 +92,8 @@ final class ColoringStore: ObservableObject {
         self.document = doc
         self.spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         self.filledElements = Self.loadProgress(for: doc.id)
-        self.selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
+        // Fresh artwork: no color selected (user picks). Resume: auto-select largest group.
+        self.selectedGroupIndex = filledElements.isEmpty ? nil : Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
 
         if filledElements.count >= doc.totalElements && doc.totalElements > 0 {
             phase = .complete
@@ -123,7 +122,7 @@ final class ColoringStore: ObservableObject {
         document = doc
         spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         filledElements = Self.loadProgress(for: doc.id)
-        selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
+        selectedGroupIndex = filledElements.isEmpty ? nil : Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
         phase = (filledElements.count >= doc.totalElements && doc.totalElements > 0) ? .complete : .painting
     }
 
@@ -161,7 +160,8 @@ final class ColoringStore: ObservableObject {
         guard !filledElements.contains(elementIndex) else { return .alreadyFilled }
 
         let groupIdx = document.elementGroupMap[elementIndex] ?? -1
-        guard groupIdx == selectedGroupIndex,
+        guard let selected = selectedGroupIndex,
+              groupIdx == selected,
               groupIdx < document.groups.count else { return .wrongGroup }
 
         // Fill entire cluster containing the tapped element
@@ -200,8 +200,8 @@ final class ColoringStore: ObservableObject {
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
             justCompletedGroupIndex = groupIdx
-            // Clear after palette has time to show checkmark
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            // Clear after palette celebrates the completion
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
                 guard self?.justCompletedGroupIndex == groupIdx else { return }
                 self?.justCompletedGroupIndex = nil
             }
@@ -211,9 +211,10 @@ final class ColoringStore: ObservableObject {
     }
 
     private func advanceToNextIncompleteGroup() {
+        guard let current = selectedGroupIndex else { return }
         let count = document.groups.count
         for offset in 1...count {
-            let idx = (selectedGroupIndex + offset) % count
+            let idx = (current + offset) % count
             let group = document.groups[idx]
             if group.elementIndices.contains(where: { !filledElements.contains($0) }) {
                 selectedGroupIndex = idx
@@ -452,14 +453,16 @@ final class ColoringStore: ObservableObject {
     func findNextUnfilled() {
         guard findUsesRemaining > 0 else { return }
 
-        if selectedGroupIndex != lastFindGroup {
+        guard let selected = selectedGroupIndex else { return }
+
+        if selected != lastFindGroup {
             findCycleIndex = 0
-            lastFindGroup = selectedGroupIndex
+            lastFindGroup = selected
         }
 
         let unfilledClusters = document.clusters
             .filter { cluster in
-                cluster.groupIndex == selectedGroupIndex &&
+                cluster.groupIndex == selected &&
                 cluster.elementIndices.contains(where: { !filledElements.contains($0) })
             }
             .sorted { $0.bounds.width * $0.bounds.height > $1.bounds.width * $1.bounds.height }
@@ -558,14 +561,14 @@ final class ColoringStore: ObservableObject {
             autoCompleteEnabled = false
             return
         }
-        guard selectedGroupIndex < document.groups.count else { return }
-        let group = document.groups[selectedGroupIndex]
+        guard let selected = selectedGroupIndex, selected < document.groups.count else { return }
+        let group = document.groups[selected]
         if let nextIdx = group.elementIndices.first(where: { !filledElements.contains($0) }) {
             tryFill(elementIndex: nextIdx)
         } else {
             advanceToNextIncompleteGroup()
-            guard selectedGroupIndex < document.groups.count else { return }
-            let newGroup = document.groups[selectedGroupIndex]
+            guard let newSelected = selectedGroupIndex, newSelected < document.groups.count else { return }
+            let newGroup = document.groups[newSelected]
             if let nextIdx = newGroup.elementIndices.first(where: { !filledElements.contains($0) }) {
                 tryFill(elementIndex: nextIdx)
             }

@@ -24,7 +24,11 @@ struct CompletionOverlayView: View {
     @State private var showNextButton = false
 
     // Feedback state
+    /// Toggle for testing: true = 5-star rating, false = thumbs up/down (production)
+    private static let useStarRating = true
     @State private var feedbackSubmitted = false
+    @State private var starRating: Int = 0
+    @State private var starComment: String = ""
 
     // Live countdown
     @State private var countdownText = ""
@@ -105,30 +109,79 @@ struct CompletionOverlayView: View {
                     .transition(Self.fadeRise)
             }
 
-            // Inline feedback — thumbs up/down
+            // Inline feedback
             if showFeedback && !alreadyRated && !feedbackSubmitted {
-                HStack(spacing: 20) {
-                    Button { submitRating(5) } label: {
-                        Image(systemName: "hand.thumbsup")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .padding(10)
-                            .background(Circle().fill(.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Like this artwork")
+                if Self.useStarRating {
+                    // Star rating (testing)
+                    VStack(spacing: 12) {
+                        HStack(spacing: 10) {
+                            ForEach(1...5, id: \.self) { star in
+                                Button {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        starRating = star
+                                    }
+                                } label: {
+                                    Image(systemName: star <= starRating ? "star.fill" : "star")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(.white.opacity(star <= starRating ? 0.9 : 0.3))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
 
-                    Button { submitRating(1) } label: {
-                        Image(systemName: "hand.thumbsdown")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .padding(10)
-                            .background(Circle().fill(.white.opacity(0.08)))
+                        if starRating > 0 {
+                            TextField("Any thoughts?", text: $starComment)
+                                .font(.system(size: 14, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.8))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(.white.opacity(0.08))
+                                )
+                                .frame(maxWidth: 280)
+                                .transition(.opacity.combined(with: .offset(y: 6)))
+
+                            Button {
+                                submitRating(starRating, comment: starComment)
+                            } label: {
+                                Text("Submit")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.8))
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 8)
+                                    .background(Capsule().fill(.white.opacity(0.15)))
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dislike this artwork")
+                    .transition(Self.fadeRise)
+                } else {
+                    // Thumbs up/down (production)
+                    HStack(spacing: 20) {
+                        Button { submitRating(5) } label: {
+                            Image(systemName: "hand.thumbsup")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .padding(10)
+                                .background(Circle().fill(.white.opacity(0.08)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Like this artwork")
+
+                        Button { submitRating(1) } label: {
+                            Image(systemName: "hand.thumbsdown")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .padding(10)
+                                .background(Circle().fill(.white.opacity(0.08)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Dislike this artwork")
+                    }
+                    .transition(Self.fadeRise)
                 }
-                .transition(Self.fadeRise)
             }
 
             if feedbackSubmitted {
@@ -250,7 +303,7 @@ struct CompletionOverlayView: View {
 
     // MARK: - Actions
 
-    private func submitRating(_ value: Int) {
+    private func submitRating(_ value: Int, comment: String = "") {
         UserDefaults.standard.set(value, forKey: "onehue.rated.\(artworkID)")
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             feedbackSubmitted = true
@@ -260,7 +313,7 @@ struct CompletionOverlayView: View {
             await CompletionService.shared.submitFeedback(
                 artworkID: artworkID,
                 rating: value,
-                comment: ""
+                comment: comment
             )
         }
     }
