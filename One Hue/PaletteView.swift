@@ -16,7 +16,7 @@ struct PaletteView: View {
     /// Fixed palette height so canvas doesn't jump when swatches appear/disappear.
     private var paletteHeight: CGFloat {
         let size: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 58 : 54
-        return size + 30  // swatch + ring + padding
+        return size + 22  // swatch + ring + tight padding
     }
 
     var body: some View {
@@ -52,7 +52,7 @@ struct PaletteView: View {
                 }
                 .animation(.easeInOut(duration: 0.6), value: completedGroupCount)
                 .padding(.horizontal, 20)
-                .padding(.vertical, 10)
+                .padding(.vertical, 6)
             }
             .onChange(of: selectedIndex) { _, newIdx in
                 if let idx = newIdx {

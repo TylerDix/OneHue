@@ -124,8 +124,8 @@ struct TodayView: View {
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
             }
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
