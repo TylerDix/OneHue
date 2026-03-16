@@ -106,26 +106,24 @@ struct TodayView: View {
                     }
                     .accessibilityLabel("Coloring canvas, \(store.document.title)")
                     .accessibilityHint("Tap colored regions to fill them")
+                    // Floating glass palette — overlaps bottom of canvas
+                    .overlay(alignment: .bottom) {
+                        ZStack(alignment: .top) {
+                            PaletteView(
+                                groups: store.document.groups,
+                                selectedIndex: $store.selectedGroupIndex,
+                                filledElements: store.filledElements,
+                                justCompletedGroupIndex: store.justCompletedGroupIndex
+                            )
 
-                // Palette — swatches animate away on completion but
-                // the container stays so the canvas doesn't jump.
-                ZStack(alignment: .top) {
-                    PaletteView(
-                        groups: store.document.groups,
-                        selectedIndex: $store.selectedGroupIndex,
-                        filledElements: store.filledElements,
-                        justCompletedGroupIndex: store.justCompletedGroupIndex,
-                        onRetap: { store.pulseTrigger &+= 1 }
-                    )
-
-                    if showPaletteTip {
-                        FeatureTip(text: "Tap a color to highlight its pieces")
-                            .offset(y: -28)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            if showPaletteTip {
+                                FeatureTip(text: "Tap a color to highlight its pieces")
+                                    .offset(y: -28)
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            }
+                        }
+                        .padding(.bottom, 8)
                     }
-                }
-                .padding(.top, 4)
-                .padding(.bottom, 8)
             }
             .onChange(of: store.phase) { _, phase in
                 withAnimation {
