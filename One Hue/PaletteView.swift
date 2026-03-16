@@ -103,21 +103,21 @@ struct PaletteView: View {
                     .strokeBorder(.black.opacity(0.15), lineWidth: 1)
                     .frame(width: swatchSize, height: swatchSize)
 
-                // Selection glow disc
-                if isSelected && !justCompleted {
-                    Circle()
-                        .fill(ringColor.opacity(0.35))
-                        .frame(width: swatchSize + 22, height: swatchSize + 22)
-                        .blur(radius: 6)
-                    Circle()
-                        .strokeBorder(.white, lineWidth: 2.5)
-                        .frame(width: swatchSize + 8, height: swatchSize + 8)
-                }
-
-                // Progress track + fill ring
+                // Progress track + fill ring (sits tight around swatch)
                 Circle()
                     .stroke(.white.opacity(0.12), lineWidth: 3.5)
                     .frame(width: swatchSize + 6, height: swatchSize + 6)
+
+                // Selection glow disc + white ring (outside progress ring)
+                if isSelected && !justCompleted {
+                    Circle()
+                        .fill(ringColor.opacity(0.35))
+                        .frame(width: swatchSize + 26, height: swatchSize + 26)
+                        .blur(radius: 6)
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 2.5)
+                        .frame(width: swatchSize + 16, height: swatchSize + 16)
+                }
 
                 if progress > 0 || justCompleted {
                     Circle()
@@ -170,7 +170,7 @@ struct PaletteView: View {
         }
         .buttonStyle(.plain)
         .disabled(justCompleted)
-        .accessibilityLabel("Color \(group.id + 1), \(remaining) of \(total) remaining")
+        .accessibilityLabel("Color \(group.id + 1)\(remaining == 0 ? ", completed" : ", \(remaining) of \(total) remaining")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

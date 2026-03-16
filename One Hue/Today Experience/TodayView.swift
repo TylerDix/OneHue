@@ -288,6 +288,8 @@ struct TodayView: View {
                     Text(store.document.title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         // DEBUG: 5-tap title to reset artwork, 3-tap to preview completion
                         .onTapGesture(count: 5) {
                             showCompletion = false
@@ -483,6 +485,9 @@ struct TodayView: View {
     private func resetCompletionSequence() {
         showCompletion = false
         showConfetti = false
+        stuckTimer?.invalidate()
+        stuckTimer = nil
+        showStuckHint = false
     }
 
     // MARK: - Share

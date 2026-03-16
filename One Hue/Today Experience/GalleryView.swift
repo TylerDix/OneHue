@@ -12,7 +12,8 @@ struct GalleryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var filter: GalleryFilter = .all
     @State private var countdownText = ""
-    private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    @State private var timerCancellable: (any Cancellable)?
+    private let timer = Timer.publish(every: 60, on: .main, in: .common)
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -139,6 +140,11 @@ struct GalleryView: View {
             .onAppear {
                 SVGDocumentCache.shared.preloadAll()
                 updateCountdown()
+                timerCancellable = timer.connect()
+            }
+            .onDisappear {
+                timerCancellable?.cancel()
+                timerCancellable = nil
             }
             .onReceive(timer) { _ in
                 updateCountdown()

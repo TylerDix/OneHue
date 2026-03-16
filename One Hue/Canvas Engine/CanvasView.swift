@@ -16,6 +16,7 @@ struct FillAnimation {
 
 struct CanvasView: View {
     @ObservedObject var store: ColoringStore
+    @Environment(\.scenePhase) private var scenePhase
 
     // Zoom + pan
     @State private var currentZoom: CGFloat = 1.0
@@ -145,6 +146,14 @@ struct CanvasView: View {
         .onDisappear {
             stopAnimationLoop()
             pulseTimer?.invalidate(); pulseTimer = nil
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                startPulse()
+            } else {
+                pulseTimer?.invalidate(); pulseTimer = nil
+                pulsePhase = 0
+            }
         }
     }
 
@@ -902,12 +911,21 @@ struct SVGCanvasRenderer: View {
                 // Place labels, skipping any that overlap an already-placed label
                 var placedRects: [CGRect] = []
 
+                let viewBox = document.viewBox
+
                 for label in labels {
                     let halfW = label.fontSize * 0.45
                     let halfH = label.fontSize * 0.55
+
+                    // Clamp label center so pill stays within the SVG viewBox
+                    let margin = label.fontSize * 0.65
+                    let cx = min(max(label.center.x, viewBox.minX + margin), viewBox.maxX - margin)
+                    let cy = min(max(label.center.y, viewBox.minY + margin), viewBox.maxY - margin)
+                    let center = CGPoint(x: cx, y: cy)
+
                     let rect = CGRect(
-                        x: label.center.x - halfW,
-                        y: label.center.y - halfH,
+                        x: center.x - halfW,
+                        y: center.y - halfH,
                         width: halfW * 2,
                         height: halfH * 2
                     )
@@ -921,8 +939,8 @@ struct SVGCanvasRenderer: View {
                     let pillW = label.fontSize * 1.1
                     let pillH = label.fontSize * 1.3
                     let pillRect = CGRect(
-                        x: label.center.x - pillW / 2,
-                        y: label.center.y - pillH / 2,
+                        x: center.x - pillW / 2,
+                        y: center.y - pillH / 2,
                         width: pillW,
                         height: pillH
                     )
@@ -934,7 +952,7 @@ struct SVGCanvasRenderer: View {
                     text.font = .system(size: label.fontSize, weight: .semibold, design: .rounded)
                     text.foregroundColor = .white.opacity(label.alpha)
 
-                    ctx.draw(Text(text), at: label.center, anchor: .center)
+                    ctx.draw(Text(text), at: center, anchor: .center)
                 }
             }
         }
