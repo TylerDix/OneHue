@@ -818,11 +818,12 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 3: Number labels — selected group only, visible when zoomed in.
-            // The color tint is the primary wayfinding tool; numbers are for precision.
+            // Pass 3: Number labels. When no color selected, show all groups
+            // with relaxed zoom threshold so numbers are visible at 1x.
             if showNumbers, !isPeeking {
-                let minVisible: CGFloat = 8
-                let fullVisible: CGFloat = 14
+                let showAllGroups = selectedGroupIndex == nil
+                let minVisible: CGFloat = showAllGroups ? 3 : 8
+                let fullVisible: CGFloat = showAllGroups ? 6 : 14
 
                 struct LabelInfo {
                     let center: CGPoint
@@ -834,9 +835,6 @@ struct SVGCanvasRenderer: View {
                 }
 
                 var labels: [LabelInfo] = []
-
-                // When no color selected, show numbers for ALL groups so users can pick
-                let showAllGroups = selectedGroupIndex == nil
 
                 for cluster in document.clusters {
                     if let selIdx = selectedGroupIndex {
