@@ -85,23 +85,42 @@ struct TodayView: View {
                         }
                     }
                     .overlay(alignment: .bottomLeading) {
-                        if showDebugOverlay && store.phase == .painting {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Taps: \(store.tapCount)")
-                                Text("Grabbed: \(store.autoGrabbedCount)")
-                                Text("Elements: \(store.document.totalElements)")
-                                Text("Grab: \(store.debugDisableTinyGrab ? "OFF" : "ON")")
-                                    .foregroundStyle(store.debugDisableTinyGrab ? .red : .green)
+                        if store.phase == .painting {
+                            VStack(alignment: .leading, spacing: 8) {
+                                // Debug overlay
+                                if showDebugOverlay {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Taps: \(store.tapCount)")
+                                        Text("Grabbed: \(store.autoGrabbedCount)")
+                                        Text("Elements: \(store.document.totalElements)")
+                                        Text("Grab: \(store.debugDisableTinyGrab ? "OFF" : "ON")")
+                                            .foregroundStyle(store.debugDisableTinyGrab ? .red : .green)
+                                    }
+                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.8))
+                                    .padding(8)
+                                    .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.6)))
+                                    .onTapGesture {
+                                        store.debugDisableTinyGrab.toggle()
+                                    }
+                                    .transition(.opacity)
+                                }
+
+                                // Zoom-to-fit button
+                                Button {
+                                    store.resetZoomTrigger.toggle()
+                                } label: {
+                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(14)
+                                        .background(Circle().fill(.black.opacity(0.35)))
+                                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Zoom to fit")
                             }
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.8))
-                            .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.6)))
                             .padding(16)
-                            .onTapGesture {
-                                store.debugDisableTinyGrab.toggle()
-                            }
-                            .transition(.opacity)
                         }
                     }
                     .accessibilityLabel("Coloring canvas, \(store.document.title)")
@@ -290,6 +309,7 @@ struct TodayView: View {
                         .foregroundStyle(.white.opacity(0.9))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .layoutPriority(-1)
                         // DEBUG: 5-tap title to reset artwork, 3-tap to preview completion
                         .onTapGesture(count: 5) {
                             showCompletion = false

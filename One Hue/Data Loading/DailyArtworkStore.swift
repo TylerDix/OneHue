@@ -17,6 +17,8 @@ final class ColoringStore: ObservableObject {
     /// Incremented when the user re-taps an already-selected palette swatch,
     /// triggering a pulse flash in CanvasView even though selectedGroupIndex didn't change.
     @Published var pulseTrigger: UInt = 0
+    /// Toggle to trigger a zoom-to-fit reset from outside CanvasView.
+    @Published var resetZoomTrigger: Bool = false
     static let maxPeeksPerGame = 3
 
     @Published private(set) var filledElements: Set<Int> = [] {
@@ -48,7 +50,7 @@ final class ColoringStore: ObservableObject {
     private var dingPlayer: AVAudioPlayer? = {
         guard let url = Bundle.main.url(forResource: "ding", withExtension: "wav") else { return nil }
         let player = try? AVAudioPlayer(contentsOf: url)
-        player?.volume = 0.05
+        player?.volume = 0.01
         player?.prepareToPlay()
         return player
     }()

@@ -109,6 +109,9 @@ struct CanvasView: View {
             guard token > 0 else { return }
             zoomToRect(store.findTargetBounds)
         }
+        .onChange(of: store.resetZoomTrigger) { _, _ in
+            resetZoom()
+        }
         .onChange(of: store.filledElements) { oldValue, newValue in
             let added = newValue.subtracting(oldValue)
             guard !added.isEmpty else { return }
