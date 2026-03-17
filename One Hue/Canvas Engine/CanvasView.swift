@@ -767,17 +767,17 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 1.5: Subtle boundary hairlines on unfilled regions.
-            // Gives consistent visual structure regardless of art style.
+            // Pass 1.5: Boundary hairlines on unfilled regions.
+            // Makes the puzzle readable at first glance — users can see distinct pieces.
             if !isPeeking {
-                let hairlineWidth: CGFloat = 0.5
+                let hairlineWidth: CGFloat = 0.6
                 let hairlineStyle = StrokeStyle(lineWidth: hairlineWidth, lineJoin: .round)
                 for element in document.elements {
                     guard !filledElements.contains(element.id) else { continue }
                     guard document.elementGroupMap[element.id] != nil else { continue }
                     let path = Path(element.path)
                     let isSelected = document.elementGroupMap[element.id] == selectedGroupIndex
-                    let opacity = isSelected ? 0.15 : 0.07
+                    let opacity = isSelected ? 0.22 : 0.14
                     ctx.stroke(path, with: .color(.white.opacity(opacity)), style: hairlineStyle)
                 }
             }

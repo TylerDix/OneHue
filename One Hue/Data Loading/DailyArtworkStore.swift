@@ -45,6 +45,14 @@ final class ColoringStore: ObservableObject {
         return player
     }()
 
+    private var dingPlayer: AVAudioPlayer? = {
+        guard let url = Bundle.main.url(forResource: "ding", withExtension: "wav") else { return nil }
+        let player = try? AVAudioPlayer(contentsOf: url)
+        player?.volume = 0.05
+        player?.prepareToPlay()
+        return player
+    }()
+
     // MARK: - Derived
 
     var isComplete: Bool {
@@ -182,6 +190,7 @@ final class ColoringStore: ObservableObject {
 
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
+        lightHaptic.impactOccurred()
 
         // Soft tap sound on fill (respects Settings toggle)
         if UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled") {
@@ -199,6 +208,10 @@ final class ColoringStore: ObservableObject {
         // Celebrate group completion — user picks next color manually (like HC)
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
+            if UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled") {
+                dingPlayer?.currentTime = 0
+                dingPlayer?.play()
+            }
             justCompletedGroupIndex = groupIdx
             // Clear after palette celebrates the completion, then deselect
             // so all numbers reappear and user picks the next color
@@ -498,6 +511,7 @@ final class ColoringStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self, self.isComplete, self.phase != .complete else { return }
             withAnimation(.easeOut(duration: 0.6)) { self.phase = .complete }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             UserDefaults.standard.set(true, forKey: "onehue.completed.\(self.currentArtwork.id)")
             Task { await CompletionService.shared.reportCompletion(artworkID: self.currentArtwork.id) }
         }
