@@ -75,7 +75,7 @@ struct GalleryView: View {
                         .padding(.bottom, 4)
                 }
 
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: false) {
                     if sections.isEmpty {
                         Text(filter == .completed ? "No completed artworks yet" : "All artworks are completed!")
                             .font(.system(size: 15, weight: .regular, design: .rounded))
