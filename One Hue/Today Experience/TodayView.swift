@@ -25,8 +25,9 @@ struct TodayView: View {
     @State private var showStuckHint = false
     @State private var stuckTimer: Timer?
 
-    // Confetti
-    @State private var showConfetti = false
+    // Completion reveal
+    @State private var showReveal = false
+    @State private var lastTapNormalized: CGPoint? = nil
 
     // Debug overlay — toggled via long-press on title
     @State private var showDebugOverlay = false
@@ -44,20 +45,36 @@ struct TodayView: View {
                     .padding(.top, 4)
 
                 // Canvas
-                CanvasView(store: store)
+                CanvasView(store: store, lastTapNormalized: $lastTapNormalized)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay {
+                        if store.loadFailed {
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 28))
+                                    .foregroundStyle(.white.opacity(0.5))
+                                Text("Artwork couldn't load")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+                        }
+                    }
                     .overlay(alignment: .bottomTrailing) {
-                        if store.phase == .painting && hasUnfilledInSelectedGroup && store.findUsesRemaining > 0 {
-                            Button { dismissTips(); showStuckHint = false; store.findNextUnfilled() } label: {
+                        if store.phase == .painting && hasUnfilledInSelectedGroup {
+                            let exhausted = store.findUsesRemaining <= 0
+                            Button {
+                                guard !exhausted else { return }
+                                dismissTips(); showStuckHint = false; store.findNextUnfilled()
+                            } label: {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "scope")
                                         .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(.white.opacity(exhausted ? 0.3 : 1.0))
                                         .padding(12)
-                                        .background(Circle().fill(.black.opacity(0.35)))
+                                        .background(Circle().fill(.black.opacity(exhausted ? 0.15 : 0.35)))
                                         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
 
-                                    if store.findUsesRemaining <= 3 {
+                                    if store.findUsesRemaining > 0, store.findUsesRemaining <= 3 {
                                         Text("\(store.findUsesRemaining)")
                                             .font(.system(size: 11, weight: .bold, design: .rounded))
                                             .foregroundStyle(.white)
@@ -68,7 +85,7 @@ struct TodayView: View {
                                 }
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Find next unfilled region, \(store.findUsesRemaining) uses remaining")
+                            .accessibilityLabel(exhausted ? "Find uses exhausted" : "Find next unfilled region, \(store.findUsesRemaining) uses remaining")
                             .overlay(alignment: .leading) {
                                 if showStuckHint {
                                     FeatureTip(text: "Stuck? Tap to find it")
@@ -156,10 +173,10 @@ struct TodayView: View {
                 }
             }
 
-            // Confetti — bursts over canvas, under completion overlay
-            ConfettiView(
-                colors: store.document.groups.map { $0.color },
-                isActive: $showConfetti
+            // Radial reveal — expands from last tap point on completion
+            RadialRevealView(
+                origin: lastTapNormalized,
+                isActive: $showReveal
             )
             .allowsHitTesting(false)
             .ignoresSafeArea()
@@ -313,13 +330,13 @@ struct TodayView: View {
                         // DEBUG: 5-tap title to reset artwork, 3-tap to preview completion
                         .onTapGesture(count: 5) {
                             showCompletion = false
-                            showConfetti = false
+                            showReveal = false
                             skipReveal = false
                             store.resetProgress()
                         }
                         .onTapGesture(count: 3) {
-                            showConfetti = false
-                            DispatchQueue.main.async { showConfetti = true }
+                            showReveal = false
+                            DispatchQueue.main.async { showReveal = true }
                             skipReveal = true
                             withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
                         }
@@ -426,11 +443,15 @@ struct TodayView: View {
         paletteTipShown = true
     }
 
+    private static let utcDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMMM d, yyyy"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
     private var todayDateString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM d, yyyy"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.string(from: Date())
+        Self.utcDateFormatter.string(from: Date())
     }
 
     /// Arms a timer that shows the "stuck" tooltip on the scope button after
@@ -488,8 +509,8 @@ struct TodayView: View {
 
         // 0.0s — Canvas freezes (phase = .complete disables gestures).
         //        Numbers dissolve (CanvasView handles this, ~1s).
-        //        Confetti bursts immediately.
-        showConfetti = true
+        //        Radial reveal expands from last tap point.
+        showReveal = true
 
         // 0.8s — Slowly drift back to center (1.5s ease).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
@@ -504,7 +525,7 @@ struct TodayView: View {
 
     private func resetCompletionSequence() {
         showCompletion = false
-        showConfetti = false
+        showReveal = false
         stuckTimer?.invalidate()
         stuckTimer = nil
         showStuckHint = false
@@ -552,10 +573,7 @@ struct TodayView: View {
     private var shareCaption: String {
         let title = store.currentArtwork.displayName
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM d, yyyy"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        let date = formatter.string(from: Date())
+        let date = Self.utcDateFormatter.string(from: Date())
 
         if isOnTodayArtwork, let count = CompletionService.shared.globalCount, count > 0 {
             let formatted = count.formatted(.number)

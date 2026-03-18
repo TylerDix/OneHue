@@ -11,6 +11,7 @@ final class ColoringStore: ObservableObject {
     @Published private(set) var document: SVGDocument
     @Published private(set) var phase: ArtworkPhase = .painting
     @Published var selectedGroupIndex: Int? = nil
+    @Published private(set) var loadFailed: Bool = false
     @Published private(set) var justCompletedGroupIndex: Int? = nil
     @Published private(set) var isPeeking: Bool = false
     @Published private(set) var peekUsesRemaining: Int = maxPeeksPerGame
@@ -55,6 +56,7 @@ final class ColoringStore: ObservableObject {
         return player
     }()
 
+
     // MARK: - Derived
 
     var isComplete: Bool {
@@ -96,10 +98,11 @@ final class ColoringStore: ObservableObject {
 
     init() {
         let (artwork, index) = Artwork.today()
-        let doc = SVGDocumentCache.shared.document(for: artwork)
-              ?? SVGDocument.empty(id: "fallback")
+        let cached = SVGDocumentCache.shared.document(for: artwork)
+        let doc = cached ?? SVGDocument.empty(id: "fallback")
         self.currentArtworkIndex = index
         self.document = doc
+        self.loadFailed = (cached == nil)
         self.spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         self.filledElements = Self.loadProgress(for: doc.id)
         // Fresh artwork: no color selected (user picks). Resume: auto-select largest group.
@@ -126,8 +129,9 @@ final class ColoringStore: ObservableObject {
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
         let artwork = catalog[index]
-        let doc = SVGDocumentCache.shared.document(for: artwork)
-              ?? SVGDocument.empty(id: "fallback")
+        let cached = SVGDocumentCache.shared.document(for: artwork)
+        let doc = cached ?? SVGDocument.empty(id: "fallback")
+        loadFailed = (cached == nil)
         currentArtworkIndex = index
         document = doc
         spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)

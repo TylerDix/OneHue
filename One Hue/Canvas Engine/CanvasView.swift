@@ -16,6 +16,7 @@ struct FillAnimation {
 
 struct CanvasView: View {
     @ObservedObject var store: ColoringStore
+    @Binding var lastTapNormalized: CGPoint?
     @Environment(\.scenePhase) private var scenePhase
 
     // Zoom + pan
@@ -44,6 +45,9 @@ struct CanvasView: View {
     // Pulse guide — breathing glow on largest unfilled cluster
     @State private var pulsePhase: Double = 0
     @State private var pulseTimer: Timer?
+
+    // "Pick a color" nudge
+    @State private var showColorNudge: Bool = false
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
@@ -100,6 +104,19 @@ struct CanvasView: View {
             }
         }
         .clipped()
+        .overlay(alignment: .bottom) {
+            if showColorNudge {
+                Text("Tap a color below")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(.black.opacity(0.55)))
+                    .padding(.bottom, 12)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .allowsHitTesting(false)
+            }
+        }
         .onChange(of: store.phase) { _, phase in animate(to: phase) }
         .onChange(of: store.completionDriftToken) { _, token in
             guard token > 0 else { return }
@@ -196,11 +213,12 @@ struct CanvasView: View {
                 if dist > Self.panThreshold {
                     gestureIsPan = true
                     if contentOverflows {
-                        // Allow panning the canvas
+                        // Allow panning the canvas — clamp immediately to prevent overscroll
                         offset = CGSize(
                             width:  lastOffset.width  + value.translation.width,
                             height: lastOffset.height + value.translation.height
                         )
+                        clampOffsetImmediate()
                     }
                 }
 
@@ -220,12 +238,22 @@ struct CanvasView: View {
             .onEnded { _ in
                 didFillThisGesture = false
                 gestureIsPan = false
-                lastOffset = offset; clampOffset()
+                clampOffsetImmediate()
+                lastOffset = offset
             }
     }
 
     private func attemptFill(at loc: CGPoint, viewportSize: CGSize, renderSize: CGSize) {
-        guard let selected = store.selectedGroupIndex else { return }
+        guard let selected = store.selectedGroupIndex else {
+            // Nudge user to pick a color first
+            if !showColorNudge {
+                withAnimation(.easeInOut(duration: 0.25)) { showColorNudge = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                    withAnimation(.easeInOut(duration: 0.4)) { showColorNudge = false }
+                }
+            }
+            return
+        }
 
         // Try exact hit
         if let hit = screenToElement(loc, viewportSize: viewportSize, renderSize: renderSize) {
@@ -235,6 +263,8 @@ struct CanvasView: View {
 
             if isCorrect && needsFill {
                 blobOrigin = hit.svgPoint
+                lastTapNormalized = CGPoint(x: loc.x / viewportSize.width,
+                                            y: loc.y / viewportSize.height)
                 store.tryFill(elementIndex: hit.elementIndex)
                 return
             }
@@ -244,6 +274,8 @@ struct CanvasView: View {
         let svg = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
         if let snapIdx = colorSnapHit(svgPoint: svg, selectedGroup: selected) {
             blobOrigin = svg
+            lastTapNormalized = CGPoint(x: loc.x / viewportSize.width,
+                                        y: loc.y / viewportSize.height)
             store.tryFill(elementIndex: snapIdx)
         }
     }
@@ -464,10 +496,10 @@ struct CanvasView: View {
                     width:  lastOffset.width  + value.translation.width,
                     height: lastOffset.height + value.translation.height
                 )
+                clampOffsetImmediate()
             }
             .onEnded { _ in
                 lastOffset = offset
-                clampOffset()
             }
     }
 
@@ -483,10 +515,19 @@ struct CanvasView: View {
         return CGSize(width: wByHeight, height: available.height)
     }
 
+    /// Hard clamp during active drag — no animation, no rubber-banding.
+    private func clampOffsetImmediate() {
+        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
+        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+        offset.width  = min(max(offset.width,  -maxX), maxX)
+        offset.height = min(max(offset.height, -maxY), maxY)
+    }
+
+    /// Animated clamp for zoom end — gentle settle after pinch release.
     private func clampOffset() {
         let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
         let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.easeOut(duration: 0.15)) {
             offset.width  = min(max(offset.width,  -maxX), maxX)
             offset.height = min(max(offset.height, -maxY), maxY)
             lastOffset = offset
