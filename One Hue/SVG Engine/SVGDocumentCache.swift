@@ -43,4 +43,12 @@ final class SVGDocumentCache: @unchecked Sendable {
         lock.unlock()
         return result
     }
+
+    /// Returns a cached document without parsing. Returns nil if not yet cached.
+    func peekDocument(for artwork: Artwork) -> SVGDocument? {
+        lock.lock()
+        let doc = cache[artwork.id]
+        lock.unlock()
+        return doc
+    }
 }

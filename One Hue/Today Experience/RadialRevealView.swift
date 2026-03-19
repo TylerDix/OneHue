@@ -1,8 +1,8 @@
 import SwiftUI
 import Combine
 
-/// Completion reveal: a soft white circle expands from the user's last tap
-/// point, briefly washing the artwork in light before fading away.
+/// Completion reveal: a warm glow ring expands from the user's last tap
+/// point, sweeping outward across the artwork before fading away.
 /// Uses CADisplayLink for smooth 60fps — same pattern as the blob fills.
 struct RadialRevealView: View {
 
@@ -11,15 +11,16 @@ struct RadialRevealView: View {
     let origin: CGPoint?
     @Binding var isActive: Bool
 
-    @StateObject private var engine = RevealEngine()
+    @StateObject private var engine = WaveRevealEngine()
 
     var body: some View {
         Canvas { context, size in
-            guard engine.opacity > 0 else { return }
+            guard engine.ringOpacity > 0 else { return }
 
             let o = origin ?? CGPoint(x: 0.5, y: 0.5)
             let cx = o.x * size.width
             let cy = o.y * size.height
+            let center = CGPoint(x: cx, y: cy)
 
             // Max radius = distance from origin to the farthest corner
             let maxR = [
@@ -27,24 +28,43 @@ struct RadialRevealView: View {
                 CGPoint(x: 0, y: size.height), CGPoint(x: size.width, y: size.height),
             ].map { hypot($0.x - cx, $0.y - cy) }.max() ?? size.width
 
-            let radius = engine.radius * maxR
+            let radius = engine.normalizedRadius * maxR
+            let ringWidth = min(size.height * 0.08, 120.0)
 
-            let rect = CGRect(x: cx - radius, y: cy - radius,
-                              width: radius * 2, height: radius * 2)
-            let circle = Path(ellipseIn: rect)
+            let innerR = max(radius - ringWidth, 0)
+            let outerR = radius + ringWidth
 
-            // Radial gradient: solid center → soft transparent edge
+            // Warm white glow color
+            let glowColor = Color(hue: 0.08, saturation: 0.12, brightness: 1.0)
+            let peak = engine.ringOpacity
+
+            // Build gradient stops for the annular ring.
+            // The ring fades: transparent → glow → transparent across [innerR, outerR].
+            // We express stops as fractions of outerR (the radial gradient's end radius).
+            let innerFrac = outerR > 0 ? innerR / outerR : 0
+            let centerFrac = outerR > 0 ? radius / outerR : 0.5
+
+            // Feather zone just inside the inner edge
+            let featherInner = max(innerFrac - 0.04, 0)
+
             let gradient = Gradient(stops: [
-                .init(color: .white.opacity(engine.opacity), location: 0.0),
-                .init(color: .white.opacity(engine.opacity * 0.6), location: 0.7),
-                .init(color: .white.opacity(0), location: 1.0),
+                .init(color: .clear, location: 0),
+                .init(color: .clear, location: featherInner),
+                .init(color: glowColor.opacity(peak * 0.10), location: innerFrac),
+                .init(color: glowColor.opacity(peak * 0.35), location: centerFrac),
+                .init(color: glowColor.opacity(peak * 0.10), location: 1.0),
             ])
 
-            context.fill(circle, with: .radialGradient(
+            let disc = Path(ellipseIn: CGRect(
+                x: cx - outerR, y: cy - outerR,
+                width: outerR * 2, height: outerR * 2
+            ))
+
+            context.fill(disc, with: .radialGradient(
                 gradient,
-                center: CGPoint(x: cx, y: cy),
+                center: center,
                 startRadius: 0,
-                endRadius: radius
+                endRadius: outerR
             ))
         }
         .allowsHitTesting(false)
@@ -56,26 +76,26 @@ struct RadialRevealView: View {
 
 // MARK: - Engine
 
-private class RevealEngine: ObservableObject {
+private class WaveRevealEngine: ObservableObject {
 
-    /// 0…1 — how far the circle has expanded
-    @Published var radius: CGFloat = 0
-    /// 0…1 — overall brightness
-    @Published var opacity: CGFloat = 0
+    /// 0…1 — how far the ring has expanded
+    @Published var normalizedRadius: CGFloat = 0
+    /// 0…1 — ring glow brightness
+    @Published var ringOpacity: CGFloat = 0
 
     private var displayLink: CADisplayLink?
     private var linkTarget: DisplayLinkTarget?
     private var startTime: Date = .now
 
     // Timing
-    private let expandDuration: TimeInterval = 0.7
-    private let holdDuration: TimeInterval = 0.15
-    private let fadeDuration: TimeInterval = 0.6
-    private var totalDuration: TimeInterval { expandDuration + holdDuration + fadeDuration }
+    private let expandDuration: TimeInterval = 2.0
+    private let afterglowDuration: TimeInterval = 0.3
+    private var totalDuration: TimeInterval { expandDuration + afterglowDuration }
+    private let peakOpacity: CGFloat = 1.0  // gradient stops scale this down
 
     func start() {
-        radius = 0
-        opacity = 0
+        normalizedRadius = 0
+        ringOpacity = 0
         startTime = .now
         startLoop()
     }
@@ -93,8 +113,8 @@ private class RevealEngine: ObservableObject {
         displayLink?.invalidate()
         displayLink = nil
         linkTarget = nil
-        radius = 0
-        opacity = 0
+        normalizedRadius = 0
+        ringOpacity = 0
     }
 
     private func tick() {
@@ -105,23 +125,18 @@ private class RevealEngine: ObservableObject {
         }
 
         if elapsed < expandDuration {
-            // Phase 1: expand circle, fade in
+            // Ring expands with ease-out cubic
             let t = elapsed / expandDuration
-            let eased = 1.0 - (1.0 - t) * (1.0 - t) // ease-out quadratic
-            radius = eased
-            // Quick fade in over first 30%
-            opacity = min(t / 0.3, 1.0) * 0.55
-        } else if elapsed < expandDuration + holdDuration {
-            // Phase 2: hold at full size
-            radius = 1.0
-            opacity = 0.55
+            let eased = 1.0 - pow(1.0 - t, 3)
+            normalizedRadius = eased
+
+            // Quick fade-in over first 0.15s, then hold
+            ringOpacity = min(CGFloat(t / 0.075), 1.0) * peakOpacity
         } else {
-            // Phase 3: fade out
-            let fadeElapsed = elapsed - expandDuration - holdDuration
-            let t = fadeElapsed / fadeDuration
-            let eased = t * t // ease-in quadratic — slow start, quick finish
-            radius = 1.0
-            opacity = 0.55 * (1.0 - eased)
+            // Afterglow: ring stays at full size, opacity fades out
+            normalizedRadius = 1.0
+            let fadeT = (elapsed - expandDuration) / afterglowDuration
+            ringOpacity = peakOpacity * CGFloat(1.0 - fadeT)
         }
     }
 

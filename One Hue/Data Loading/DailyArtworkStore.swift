@@ -463,6 +463,23 @@ final class ColoringStore: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: "onehue.debug.disableTinyGrab"); objectWillChange.send() }
     }
 
+    #if DEBUG
+    /// Live canvas metrics published by CanvasView for the tester panel.
+    struct CanvasDebugInfo {
+        var viewportSize: CGSize = .zero
+        var renderSize: CGSize = .zero
+        var zoom: CGFloat = 1.0
+        var offset: CGSize = .zero
+        var contentOverflows: Bool = false
+    }
+    @Published var canvasDebug = CanvasDebugInfo()
+
+    /// Fill every grouped element instantly — for testing completion flow.
+    func fillAll() {
+        filledElements = document.groupedIndices
+    }
+    #endif
+
     /// Maximum number of find-targets per color group. Prioritises the
     /// largest clusters so the finder highlights meaningful regions first
     /// and skips tiny specks that are tedious to hunt for.
