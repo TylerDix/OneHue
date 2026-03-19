@@ -32,6 +32,10 @@ struct CanvasView: View {
     // Gesture state
     @State private var isZooming: Bool = false
 
+    // Zoom momentum tracking
+    @State private var lastZoomTime: Date = .distantPast
+    @State private var zoomVelocity: CGFloat = 0  // multiplier per second
+
     // Phase animation
     @State private var showNumbers: Bool = true
 
@@ -51,6 +55,9 @@ struct CanvasView: View {
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
+    /// Soft limits allow temporary overshoot during pinch for rubbery feel.
+    private var softMinZoom: CGFloat { minZoom * 0.6 }
+    private var softMaxZoom: CGFloat { maxZoom * 1.3 }
     private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
     /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
     private var defaultZoom: CGFloat { Self.isIPad ? 1.5 : 1.0 }
@@ -97,10 +104,16 @@ struct CanvasView: View {
                 if Self.isIPad {
                     currentZoom = defaultZoom; lastZoom = defaultZoom
                 }
+                #if DEBUG
+                pushDebugInfo()
+                #endif
             }
             .onChange(of: geo.size) { _, newSize in
                 viewportSize = newSize
                 currentRenderSize = renderedSize(in: newSize)
+                #if DEBUG
+                pushDebugInfo()
+                #endif
             }
             .onChange(of: store.document.id) { _, _ in
                 currentRenderSize = renderedSize(in: geo.size)
@@ -109,6 +122,9 @@ struct CanvasView: View {
                     currentZoom = defaultZoom; lastZoom = defaultZoom
                     offset = .zero; lastOffset = .zero
                 }
+                #if DEBUG
+                pushDebugInfo()
+                #endif
             }
         }
         .clipped()
@@ -221,12 +237,15 @@ struct CanvasView: View {
                 if dist > Self.panThreshold {
                     gestureIsPan = true
                     if contentOverflows {
-                        // Allow panning the canvas — clamp immediately to prevent overscroll
+                        // Allow panning with rubber-band at edges
+                        let rawX = lastOffset.width  + value.translation.width
+                        let rawY = lastOffset.height + value.translation.height
+                        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
+                        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
                         offset = CGSize(
-                            width:  lastOffset.width  + value.translation.width,
-                            height: lastOffset.height + value.translation.height
+                            width:  Self.rubberBand(rawX, limit: maxX),
+                            height: Self.rubberBand(rawY, limit: maxY)
                         )
-                        clampOffsetImmediate()
                     }
                 }
 
@@ -244,10 +263,18 @@ struct CanvasView: View {
                 }
             }
             .onEnded { _ in
+                let wasPan = gestureIsPan
                 didFillThisGesture = false
                 gestureIsPan = false
-                clampOffsetImmediate()
-                lastOffset = offset
+                if wasPan {
+                    // Snap back from rubber-band overshoot
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        clampOffsetValues()
+                        lastOffset = offset
+                    }
+                } else {
+                    lastOffset = offset
+                }
             }
     }
 
@@ -473,24 +500,62 @@ struct CanvasView: View {
             .onChanged { value in
                 if !isZooming {
                     isZooming = true
+                    zoomVelocity = 0
+                    lastZoomTime = .now
                 }
-                let newZoom = min(max(lastZoom * value, minZoom), maxZoom)
-                if currentZoom > 0.01 {
-                    let scale = newZoom / currentZoom
+                // Allow overshoot past limits (rubber-band), clamped to soft limits
+                let rawZoom = lastZoom * value
+                let newZoom = min(max(rawZoom, softMinZoom), softMaxZoom)
+
+                // Track zoom velocity (ratio change per second)
+                let now = Date.now
+                let dt = now.timeIntervalSince(lastZoomTime)
+                if dt > 0.01, currentZoom > 0.01 {
+                    let instantVelocity = (newZoom / currentZoom - 1.0) / dt
+                    zoomVelocity = zoomVelocity * 0.3 + instantVelocity * 0.7
+                }
+                lastZoomTime = now
+
+                // Interpolated zoom — gives the buttery smooth feel
+                withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.86)) {
+                    if currentZoom > 0.01 {
+                        let scale = newZoom / currentZoom
+                        offset = CGSize(
+                            width:  offset.width  * scale,
+                            height: offset.height * scale
+                        )
+                    }
+                    currentZoom = newZoom
+                }
+            }
+            .onEnded { _ in
+                // Apply momentum: project zoom forward based on velocity
+                let momentumDuration: CGFloat = 0.35
+                var projectedZoom = currentZoom * (1.0 + zoomVelocity * momentumDuration)
+                // Clamp to hard limits
+                projectedZoom = min(max(projectedZoom, minZoom), maxZoom)
+
+                let scale = projectedZoom / max(currentZoom, 0.01)
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
                     offset = CGSize(
                         width:  offset.width  * scale,
                         height: offset.height * scale
                     )
+                    currentZoom = projectedZoom
                 }
-                currentZoom = newZoom
-            }
-            .onEnded { _ in
-                lastZoom = currentZoom
+
+                lastZoom = projectedZoom
                 lastOffset = offset
-                clampOffset()
+                zoomVelocity = 0
+
+                // Clamp offset after spring settles
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    clampOffset()
+                }
+
                 // Brief delay before re-enabling fills to prevent accidental
                 // fill from finger lift at the end of a pinch
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     isZooming = false
                 }
             }
@@ -500,15 +565,34 @@ struct CanvasView: View {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
                 guard contentOverflows else { return }
+                let rawX = lastOffset.width  + value.translation.width
+                let rawY = lastOffset.height + value.translation.height
+
+                // Rubber-band: allow overshoot past edges with resistance
+                let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
+                let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
                 offset = CGSize(
-                    width:  lastOffset.width  + value.translation.width,
-                    height: lastOffset.height + value.translation.height
+                    width:  Self.rubberBand(rawX, limit: maxX),
+                    height: Self.rubberBand(rawY, limit: maxY)
                 )
-                clampOffsetImmediate()
             }
             .onEnded { _ in
                 lastOffset = offset
+                // Snap back from rubber-band overshoot
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    clampOffsetValues()
+                    lastOffset = offset
+                }
             }
+    }
+
+    /// Rubber-band effect: past the limit, displacement is attenuated logarithmically.
+    private static func rubberBand(_ value: CGFloat, limit: CGFloat) -> CGFloat {
+        let clamped = min(max(value, -limit), limit)
+        if abs(value) <= limit { return value }
+        let overshoot = abs(value) - limit
+        let dampened = limit + overshoot / (1.0 + overshoot / 120.0)
+        return value > 0 ? dampened : -dampened
     }
 
     // MARK: - Layout
@@ -523,12 +607,23 @@ struct CanvasView: View {
         return CGSize(width: wByHeight, height: available.height)
     }
 
+    /// Clamp offset values without animation — call inside withAnimation blocks.
+    private func clampOffsetValues() {
+        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
+        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+        offset.width  = min(max(offset.width,  -maxX), maxX)
+        offset.height = min(max(offset.height, -maxY), maxY)
+    }
+
     /// Hard clamp during active drag — no animation, no rubber-banding.
     private func clampOffsetImmediate() {
         let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
         let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
         offset.width  = min(max(offset.width,  -maxX), maxX)
         offset.height = min(max(offset.height, -maxY), maxY)
+        #if DEBUG
+        pushDebugInfo()
+        #endif
     }
 
     /// Animated clamp for zoom end — gentle settle after pinch release.
@@ -540,6 +635,9 @@ struct CanvasView: View {
             offset.height = min(max(offset.height, -maxY), maxY)
             lastOffset = offset
         }
+        #if DEBUG
+        pushDebugInfo()
+        #endif
     }
 
     /// Distance from origin to farthest bounding-box corner of the given elements.
@@ -558,6 +656,18 @@ struct CanvasView: View {
         }
         return maxDist
     }
+
+    #if DEBUG
+    private func pushDebugInfo() {
+        store.canvasDebug = .init(
+            viewportSize: viewportSize,
+            renderSize: currentRenderSize,
+            zoom: currentZoom,
+            offset: offset,
+            contentOverflows: contentOverflows
+        )
+    }
+    #endif
 
     private func resetZoom(to zoom: CGFloat? = nil) {
         let z = zoom ?? 1.0
