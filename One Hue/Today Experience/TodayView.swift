@@ -32,8 +32,9 @@ struct TodayView: View {
     // Debug overlay — toggled via long-press on title
     @State private var showDebugOverlay = false
 
-    // TEMPORARY: Test-mode navigation — prev/next through all artworks
-    @State private var testMode = false
+    #if DEBUG
+    @State private var showTesterPanel = false
+    #endif
 
     var body: some View {
         ZStack {
@@ -206,11 +207,7 @@ struct TodayView: View {
                     .padding(.bottom, 8)
                     .background(Color.black)
 
-                // TEMPORARY: Test-mode nav bar — double-tap gear icon to toggle
-                if testMode {
-                    testModeBar
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
+                // (tester panel is a sheet — no inline bar needed)
 
                 Color.clear
                     .allowsHitTesting(false)
@@ -299,6 +296,18 @@ struct TodayView: View {
                 ShareSheet(items: [image, "One Hue — \(store.currentArtwork.displayName)"])
             }
         }
+        #if DEBUG
+        .sheet(isPresented: $showTesterPanel) {
+            TesterPanelView(store: store) {
+                // Preview completion callback
+                showReveal = false
+                DispatchQueue.main.async { showReveal = true }
+                skipReveal = true
+                withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        #endif
     }
 
     // MARK: - Header
@@ -420,66 +429,21 @@ struct TodayView: View {
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(testMode ? .yellow.opacity(0.9) : .white.opacity(0.9))
+                    .foregroundStyle(.white.opacity(0.9))
                     .padding(10)
                     .background(Circle().fill(.black.opacity(0.35)))
                     .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
-            // TEMPORARY: double-tap gear to toggle test mode
+            #if DEBUG
+            // Double-tap gear to open tester panel
             .onTapGesture(count: 2) {
-                withAnimation(.easeInOut(duration: 0.3)) { testMode.toggle() }
+                showTesterPanel = true
             }
+            #endif
         }
         .padding(.horizontal, 18)
-    }
-
-    // MARK: - Test Mode (TEMPORARY — remove after testing)
-
-    private var testModeBar: some View {
-        HStack(spacing: 0) {
-            Button {
-                skipReveal = true
-                withAnimation { showCompletion = false }
-                store.previousArtwork()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.yellow)
-                    .frame(width: 44, height: 32)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text("\(store.currentArtworkIndex + 1) / \(Artwork.catalog.count)")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.yellow.opacity(0.8))
-
-            Text("  \(store.currentArtwork.id)")
-                .font(.system(size: 11, weight: .regular, design: .monospaced))
-                .foregroundStyle(.yellow.opacity(0.5))
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer()
-
-            Button {
-                skipReveal = true
-                withAnimation { showCompletion = false }
-                store.nextArtwork()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.yellow)
-                    .frame(width: 44, height: 32)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .background(Color.yellow.opacity(0.08))
     }
 
     // MARK: - Helpers
@@ -574,8 +538,8 @@ struct TodayView: View {
             store.triggerCompletionDrift()
         }
 
-        // 2.0s — Overlay rises in (drift is mostly done, canvas is settled).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        // 2.5s — Overlay rises in (glow ring finished, canvas is settled).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation(.easeOut(duration: 0.8)) { showCompletion = true }
         }
     }
@@ -746,8 +710,8 @@ private struct FeatureTip: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                Capsule().fill(.white.opacity(0.15))
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+                Capsule().fill(.black.opacity(0.35))
+                    .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
             )
             .fixedSize()
             .allowsHitTesting(false)

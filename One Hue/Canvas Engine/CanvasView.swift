@@ -53,14 +53,17 @@ struct CanvasView: View {
     // "Pick a color" nudge
     @State private var showColorNudge: Bool = false
 
+    // Peek wobble — hints that panning exists on first ever load
+    @State private var hasWobbled: Bool = false
+
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
     /// Soft limits allow temporary overshoot during pinch for rubbery feel.
-    private var softMinZoom: CGFloat { minZoom * 0.6 }
-    private var softMaxZoom: CGFloat { maxZoom * 1.3 }
+    private var softMinZoom: CGFloat { minZoom * 0.4 }
+    private var softMaxZoom: CGFloat { maxZoom * 1.5 }
     private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
     /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
-    private var defaultZoom: CGFloat { Self.isIPad ? 1.5 : 1.0 }
+    private var defaultZoom: CGFloat { 1.0 }
 
     private var contentOverflows: Bool {
         guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
@@ -100,13 +103,10 @@ struct CanvasView: View {
             .onAppear {
                 viewportSize = geo.size
                 currentRenderSize = renderSize
-                // iPad starts zoomed so artwork fills the large screen
-                if Self.isIPad {
-                    currentZoom = defaultZoom; lastZoom = defaultZoom
-                }
                 #if DEBUG
                 pushDebugInfo()
                 #endif
+                peekWobbleIfNeeded()
             }
             .onChange(of: geo.size) { _, newSize in
                 viewportSize = newSize
@@ -133,9 +133,12 @@ struct CanvasView: View {
                 Text("Tap a color below")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(.black.opacity(0.55)))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(.black.opacity(0.35))
+                            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                    )
                     .padding(.bottom, 12)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                     .allowsHitTesting(false)
@@ -222,9 +225,10 @@ struct CanvasView: View {
     /// Tap-or-pan: fills happen on finger-lift only if the finger didn't travel far.
     /// This prevents accidental fills when the user intends to drag/pan.
     /// Set true once we schedule a fill; reset on onEnded.
-    @State private var didFillThisGesture: Bool = false
     /// Set true when finger has moved enough to be a pan, cancelling any pending fill.
     @State private var gestureIsPan: Bool = false
+    /// Stash tap location so we can fill on onEnded if it wasn't a pan.
+    @State private var pendingFillLocation: CGPoint? = nil
 
     /// Points of travel before we consider it a pan and cancel the pending fill.
     private static let panThreshold: CGFloat = 6
@@ -236,44 +240,48 @@ struct CanvasView: View {
                 let dist = hypot(value.translation.width, value.translation.height)
                 if dist > Self.panThreshold {
                     gestureIsPan = true
+                    pendingFillLocation = nil  // cancel any pending fill
                     if contentOverflows {
                         // Allow panning with rubber-band at edges
                         let rawX = lastOffset.width  + value.translation.width
                         let rawY = lastOffset.height + value.translation.height
                         let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
                         let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
-                        offset = CGSize(
-                            width:  Self.rubberBand(rawX, limit: maxX),
-                            height: Self.rubberBand(rawY, limit: maxY)
-                        )
+                        withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
+                            offset = CGSize(
+                                width:  Self.rubberBand(rawX, limit: maxX),
+                                height: Self.rubberBand(rawY, limit: maxY)
+                            )
+                        }
                     }
                 }
 
-                guard store.phase == .painting, !store.isPeeking else { return }
-                guard !isZooming else { return }
-                guard !didFillThisGesture else { return }
-                didFillThisGesture = true
-
-                // Schedule fill after a tiny delay — if the finger moves or
-                // a pinch starts before it fires, the fill is cancelled.
-                let loc = value.location
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) {
-                    guard !isZooming, !gestureIsPan else { return }
-                    attemptFill(at: loc, viewportSize: viewportSize, renderSize: renderSize)
+                // Stash first touch location for fill-on-release
+                if pendingFillLocation == nil, !gestureIsPan {
+                    pendingFillLocation = value.location
                 }
             }
             .onEnded { _ in
                 let wasPan = gestureIsPan
-                didFillThisGesture = false
+                let fillLoc = pendingFillLocation
                 gestureIsPan = false
+                pendingFillLocation = nil
+
                 if wasPan {
                     // Snap back from rubber-band overshoot
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
                         clampOffsetValues()
                         lastOffset = offset
                     }
                 } else {
                     lastOffset = offset
+                    // Fill on lift — only if it wasn't a pan or zoom
+                    if let loc = fillLoc,
+                       !isZooming,
+                       store.phase == .painting,
+                       !store.isPeeking {
+                        attemptFill(at: loc, viewportSize: viewportSize, renderSize: renderSize)
+                    }
                 }
             }
     }
@@ -517,7 +525,7 @@ struct CanvasView: View {
                 lastZoomTime = now
 
                 // Interpolated zoom — gives the buttery smooth feel
-                withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.86)) {
+                withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
                     if currentZoom > 0.01 {
                         let scale = newZoom / currentZoom
                         offset = CGSize(
@@ -530,13 +538,13 @@ struct CanvasView: View {
             }
             .onEnded { _ in
                 // Apply momentum: project zoom forward based on velocity
-                let momentumDuration: CGFloat = 0.35
+                let momentumDuration: CGFloat = 0.5
                 var projectedZoom = currentZoom * (1.0 + zoomVelocity * momentumDuration)
                 // Clamp to hard limits
                 projectedZoom = min(max(projectedZoom, minZoom), maxZoom)
 
                 let scale = projectedZoom / max(currentZoom, 0.01)
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.58)) {
                     offset = CGSize(
                         width:  offset.width  * scale,
                         height: offset.height * scale
@@ -571,15 +579,17 @@ struct CanvasView: View {
                 // Rubber-band: allow overshoot past edges with resistance
                 let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
                 let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
-                offset = CGSize(
-                    width:  Self.rubberBand(rawX, limit: maxX),
-                    height: Self.rubberBand(rawY, limit: maxY)
-                )
+                withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
+                    offset = CGSize(
+                        width:  Self.rubberBand(rawX, limit: maxX),
+                        height: Self.rubberBand(rawY, limit: maxY)
+                    )
+                }
             }
             .onEnded { _ in
                 lastOffset = offset
                 // Snap back from rubber-band overshoot
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
                     clampOffsetValues()
                     lastOffset = offset
                 }
@@ -591,7 +601,7 @@ struct CanvasView: View {
         let clamped = min(max(value, -limit), limit)
         if abs(value) <= limit { return value }
         let overshoot = abs(value) - limit
-        let dampened = limit + overshoot / (1.0 + overshoot / 120.0)
+        let dampened = limit + overshoot / (1.0 + overshoot / 200.0)
         return value > 0 ? dampened : -dampened
     }
 
@@ -668,6 +678,37 @@ struct CanvasView: View {
         )
     }
     #endif
+
+    /// One-time horizontal wobble to hint that the canvas is pannable.
+    private func peekWobbleIfNeeded() {
+        guard !hasWobbled else { return }
+        let key = "onehue.hasSeenPeekWobble"
+        guard !UserDefaults.standard.bool(forKey: key) else {
+            hasWobbled = true
+            return
+        }
+        hasWobbled = true
+        UserDefaults.standard.set(true, forKey: key)
+
+        let drift: CGFloat = 18
+        // Slight delay so the artwork is fully visible first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeOut(duration: 0.2)) {
+                offset.width = drift
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    offset.width = -drift
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                        offset = .zero
+                        lastOffset = .zero
+                    }
+                }
+            }
+        }
+    }
 
     private func resetZoom(to zoom: CGFloat? = nil) {
         let z = zoom ?? 1.0
