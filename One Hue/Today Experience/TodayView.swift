@@ -623,7 +623,7 @@ private struct OnboardingOverlay: View {
     private let steps: [(icon: String, title: String, body: String)] = [
         ("paintbrush.pointed", "Tap to fill", "Each region has a number. Select a color from the palette, then tap matching regions to fill them."),
         ("scope", "Find regions", "Lost a region? Tap the scope button to zoom to the next unfilled area for your selected color."),
-        ("eye", "Peek ahead", "Curious what you're building? Tap the eye icon to peek at the finished artwork."),
+        // ("eye", "Peek ahead", "Curious what you're building? Tap the eye icon to peek at the finished artwork."),
     ]
 
     var body: some View {

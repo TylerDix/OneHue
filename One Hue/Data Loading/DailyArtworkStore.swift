@@ -188,23 +188,23 @@ final class ColoringStore: ObservableObject {
 
         let clusterCount = toFill.count
 
-        // Also collect tiny neighbors near any element in the filled cluster
-        if !debugDisableTinyGrab {
-            collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
-        }
+        // Tiny-grab disabled — user prefers manual control
+        // if !debugDisableTinyGrab {
+        //     collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
+        // }
 
         autoGrabbedCount += toFill.count - clusterCount
         tapCount += 1
 
-        // Single mutation → one didSet trigger
-        filledElements.formUnion(toFill)
+        // Sound + haptic fire BEFORE fill mutation for snappier feedback
         lightHaptic.impactOccurred()
-
-        // Soft tap sound on fill (respects Settings toggle)
         if UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled") {
             fillPlayer?.currentTime = 0
             fillPlayer?.play()
         }
+
+        // Single mutation → one didSet trigger
+        filledElements.formUnion(toFill)
 
         // Auto-complete group when 90%+ filled — forgiveness for invisible stragglers
         let group = document.groups[groupIdx]
