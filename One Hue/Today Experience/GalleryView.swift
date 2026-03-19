@@ -234,7 +234,7 @@ private struct GalleryCell: View {
                         if let doc = document {
                             SVGCanvasRenderer(
                                 document: doc,
-                                filledElements: Set(0..<doc.totalElements),
+                                filledElements: isCompleted ? Set(0..<doc.totalElements) : [],
                                 selectedGroupIndex: nil,
                                 showNumbers: false,
                                 isPeeking: false,

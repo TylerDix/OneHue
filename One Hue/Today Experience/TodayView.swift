@@ -127,19 +127,19 @@ struct TodayView: View {
                                     .transition(.opacity)
                                 }
 
-                                // Zoom-to-fit button
-                                Button {
-                                    store.resetZoomTrigger.toggle()
-                                } label: {
-                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(14)
-                                        .background(Circle().fill(.black.opacity(0.35)))
-                                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Zoom to fit")
+                                // Zoom-to-fit button (disabled)
+//                                Button {
+//                                    store.resetZoomTrigger.toggle()
+//                                } label: {
+//                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+//                                        .font(.system(size: 18, weight: .bold))
+//                                        .foregroundStyle(.white)
+//                                        .padding(14)
+//                                        .background(Circle().fill(.black.opacity(0.35)))
+//                                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+//                                }
+//                                .buttonStyle(.plain)
+//                                .accessibilityLabel("Zoom to fit")
                             }
                             .padding(16)
                         }
@@ -320,12 +320,8 @@ struct TodayView: View {
         HStack {
             if !isOnTodayArtwork {
                 Button {
-                    let targetIdx = store.previousArtworkIndex ?? Artwork.today().index
-                    skipReveal = true  // instant overlay when returning to completed artwork
-                    store.loadArtwork(at: targetIdx)
-                    // Refresh completion count so user sees latest stats
-                    Task { await CompletionService.shared.fetchCount(artworkID: Artwork.catalog[targetIdx].id) }
-                    Task { await CompletionService.shared.fetchCountryFlags(artworkID: Artwork.catalog[targetIdx].id) }
+                    skipReveal = true
+                    store.loadArtwork(at: Artwork.today().index)
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
@@ -335,7 +331,7 @@ struct TodayView: View {
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
-                .accessibilityLabel("Return to previous artwork")
+                .accessibilityLabel("Return to today's artwork")
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -381,39 +377,40 @@ struct TodayView: View {
 
             Spacer(minLength: 4)
 
-            if store.phase == .painting && store.peekUsesRemaining > 0 {
-                Button {
-                    dismissTips()
-                    store.peek()
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "eye")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(store.isPeeking ? 1.0 : 0.9))
-                            .padding(10)
-                            .background(Circle().fill(.black.opacity(store.isPeeking ? 0.55 : 0.35)))
-                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
-
-                        Text("\(store.peekUsesRemaining)")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
-                            .background(Circle().fill(.white.opacity(0.25)))
-                            .offset(x: 4, y: -4)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(store.isPeeking)
-                .accessibilityLabel("Peek at finished artwork, \(store.peekUsesRemaining) uses remaining")
-                .overlay(alignment: .bottom) {
-                    if showPeekTip {
-                        FeatureTip(text: "Peek at the finished art")
-                            .offset(y: 44)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-                }
-                .transition(.opacity)
-            }
+            // Peek button (disabled)
+//            if store.phase == .painting && store.peekUsesRemaining > 0 {
+//                Button {
+//                    dismissTips()
+//                    store.peek()
+//                } label: {
+//                    ZStack(alignment: .topTrailing) {
+//                        Image(systemName: "eye")
+//                            .font(.system(size: 15, weight: .semibold))
+//                            .foregroundStyle(.white.opacity(store.isPeeking ? 1.0 : 0.9))
+//                            .padding(10)
+//                            .background(Circle().fill(.black.opacity(store.isPeeking ? 0.55 : 0.35)))
+//                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+//
+//                        Text("\(store.peekUsesRemaining)")
+//                            .font(.system(size: 11, weight: .bold, design: .rounded))
+//                            .foregroundStyle(.white)
+//                            .frame(width: 18, height: 18)
+//                            .background(Circle().fill(.white.opacity(0.25)))
+//                            .offset(x: 4, y: -4)
+//                    }
+//                }
+//                .buttonStyle(.plain)
+//                .disabled(store.isPeeking)
+//                .accessibilityLabel("Peek at finished artwork, \(store.peekUsesRemaining) uses remaining")
+//                .overlay(alignment: .bottom) {
+//                    if showPeekTip {
+//                        FeatureTip(text: "Peek at the finished art")
+//                            .offset(y: 44)
+//                            .transition(.opacity.combined(with: .move(edge: .top)))
+//                    }
+//                }
+//                .transition(.opacity)
+//            }
 
             Button { showGallery = true } label: {
                 Image(systemName: "square.grid.2x2")

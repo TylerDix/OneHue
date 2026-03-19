@@ -1224,8 +1224,8 @@ struct SVGCanvasRenderer: View {
         uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
         let baseBrightness = max(b, 0.35)
         return Color(hue: Double(h),
-                     saturation: Double(s * 0.18),
-                     brightness: Double(baseBrightness * 0.32))
+                     saturation: Double(s * 0.12),
+                     brightness: Double(baseBrightness * 0.23))
     }
 }
 
