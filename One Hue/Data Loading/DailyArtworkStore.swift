@@ -85,6 +85,7 @@ final class ColoringStore: ObservableObject {
     // MARK: - Available Artworks
 
     private(set) var currentArtworkIndex: Int = 0
+    private(set) var previousArtworkIndex: Int? = nil
 
     var currentArtwork: Artwork {
         let catalog = Artwork.catalog
@@ -128,6 +129,7 @@ final class ColoringStore: ObservableObject {
         isPeeking = false
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
+        previousArtworkIndex = currentArtworkIndex
         let artwork = catalog[index]
         let cached = SVGDocumentCache.shared.document(for: artwork)
         let doc = cached ?? SVGDocument.empty(id: "fallback")

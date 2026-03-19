@@ -32,6 +32,9 @@ struct TodayView: View {
     // Debug overlay — toggled via long-press on title
     @State private var showDebugOverlay = false
 
+    // TEMPORARY: Test-mode navigation — prev/next through all artworks
+    @State private var testMode = false
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -202,6 +205,13 @@ struct TodayView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 8)
                     .background(Color.black)
+
+                // TEMPORARY: Test-mode nav bar — double-tap gear icon to toggle
+                if testMode {
+                    testModeBar
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 Color.clear
                     .allowsHitTesting(false)
             }
@@ -301,12 +311,12 @@ struct TodayView: View {
         HStack {
             if !isOnTodayArtwork {
                 Button {
-                    let todayIdx = Artwork.today().index
+                    let targetIdx = store.previousArtworkIndex ?? Artwork.today().index
                     skipReveal = true  // instant overlay when returning to completed artwork
-                    store.loadArtwork(at: todayIdx)
+                    store.loadArtwork(at: targetIdx)
                     // Refresh completion count so user sees latest stats
-                    Task { await CompletionService.shared.fetchCount(artworkID: Artwork.catalog[todayIdx].id) }
-                    Task { await CompletionService.shared.fetchCountryFlags(artworkID: Artwork.catalog[todayIdx].id) }
+                    Task { await CompletionService.shared.fetchCount(artworkID: Artwork.catalog[targetIdx].id) }
+                    Task { await CompletionService.shared.fetchCountryFlags(artworkID: Artwork.catalog[targetIdx].id) }
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
@@ -316,13 +326,13 @@ struct TodayView: View {
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
-                .accessibilityLabel("Return to today's artwork")
+                .accessibilityLabel("Return to previous artwork")
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(store.document.title)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -360,16 +370,7 @@ struct TodayView: View {
                 }
             }
 
-            Spacer()
-
-            #if DEBUG
-            if store.phase == .painting {
-                Text(store.progressText)
-                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .transition(.opacity)
-            }
-            #endif
+            Spacer(minLength: 4)
 
             if store.phase == .painting && store.peekUsesRemaining > 0 {
                 Button {
@@ -419,15 +420,66 @@ struct TodayView: View {
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(testMode ? .yellow.opacity(0.9) : .white.opacity(0.9))
                     .padding(10)
                     .background(Circle().fill(.black.opacity(0.35)))
                     .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
+            // TEMPORARY: double-tap gear to toggle test mode
+            .onTapGesture(count: 2) {
+                withAnimation(.easeInOut(duration: 0.3)) { testMode.toggle() }
+            }
         }
         .padding(.horizontal, 18)
+    }
+
+    // MARK: - Test Mode (TEMPORARY — remove after testing)
+
+    private var testModeBar: some View {
+        HStack(spacing: 0) {
+            Button {
+                skipReveal = true
+                withAnimation { showCompletion = false }
+                store.previousArtwork()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.yellow)
+                    .frame(width: 44, height: 32)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Text("\(store.currentArtworkIndex + 1) / \(Artwork.catalog.count)")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.yellow.opacity(0.8))
+
+            Text("  \(store.currentArtwork.id)")
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .foregroundStyle(.yellow.opacity(0.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer()
+
+            Button {
+                skipReveal = true
+                withAnimation { showCompletion = false }
+                store.nextArtwork()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.yellow)
+                    .frame(width: 44, height: 32)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .background(Color.yellow.opacity(0.08))
     }
 
     // MARK: - Helpers

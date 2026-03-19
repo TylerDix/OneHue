@@ -121,20 +121,16 @@ struct GalleryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        store.loadArtwork(at: Artwork.today().index)
                         dismiss()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 11, weight: .semibold))
-                            Text("Today")
+                            Text("Back")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
                         }
                     }
-                    .accessibilityLabel("Return to today's artwork")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    .accessibilityLabel("Return to artwork")
                 }
             }
             .onAppear {

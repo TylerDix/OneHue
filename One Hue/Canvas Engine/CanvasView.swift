@@ -552,7 +552,7 @@ struct CanvasView: View {
     }
 
     private func resetZoom(to zoom: CGFloat? = nil) {
-        let z = zoom ?? defaultZoom
+        let z = zoom ?? 1.0
         withAnimation(.easeInOut(duration: 0.3)) {
             currentZoom = z; lastZoom = z
             offset = .zero; lastOffset = .zero
