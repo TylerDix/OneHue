@@ -124,6 +124,8 @@ struct CanvasView: View {
                     currentZoom = defaultZoom; lastZoom = defaultZoom
                     offset = .zero; lastOffset = .zero
                 }
+                hasWobbled = false
+                peekWobbleIfNeeded()
                 #if DEBUG
                 pushDebugInfo()
                 #endif
@@ -683,16 +685,11 @@ struct CanvasView: View {
     }
     #endif
 
-    /// One-time horizontal wobble to hint that the canvas is pannable.
+    /// Horizontal wobble to hint that the canvas is pannable.
+    /// Fires every time an artwork is opened.
     private func peekWobbleIfNeeded() {
         guard !hasWobbled else { return }
-        let key = "onehue.hasSeenPeekWobble"
-        guard !UserDefaults.standard.bool(forKey: key) else {
-            hasWobbled = true
-            return
-        }
         hasWobbled = true
-        UserDefaults.standard.set(true, forKey: key)
 
         let drift: CGFloat = 18
         // Slight delay so the artwork is fully visible first

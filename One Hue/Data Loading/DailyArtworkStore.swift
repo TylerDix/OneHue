@@ -41,8 +41,15 @@ final class ColoringStore: ObservableObject {
     private var fillPlayer: AVAudioPlayer? = {
         // .ambient respects the silent switch and mixes with other audio
         try? AVAudioSession.sharedInstance().setCategory(.ambient)
+        try? AVAudioSession.sharedInstance().setActive(true)
         guard let url = Bundle.main.url(forResource: "bloop", withExtension: "m4a") else { return nil }
         let player = try? AVAudioPlayer(contentsOf: url)
+        player?.volume = 0.3
+        player?.prepareToPlay()
+        // Prime the audio pipeline by playing at zero volume
+        player?.volume = 0
+        player?.play()
+        player?.stop()
         player?.volume = 0.3
         player?.prepareToPlay()
         return player

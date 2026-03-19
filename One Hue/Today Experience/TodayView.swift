@@ -144,20 +144,6 @@ struct TodayView: View {
                             .padding(16)
                         }
                     }
-                    .overlay(alignment: .bottom) {
-                        // "Select a color" prompt when painting with no color selected
-                        if store.phase == .painting && store.selectedGroupIndex == nil && store.filledElements.isEmpty {
-                            Text("Select a color below to start")
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Capsule().fill(.white.opacity(0.2)))
-                                .padding(.bottom, 16)
-                                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                                .animation(.easeOut(duration: 0.4), value: store.selectedGroupIndex == nil)
-                        }
-                    }
                     .accessibilityLabel("Coloring canvas, \(store.document.title)")
                     .accessibilityHint("Tap colored regions to fill them")
 
