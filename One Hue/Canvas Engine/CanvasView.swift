@@ -102,6 +102,14 @@ struct CanvasView: View {
                 viewportSize = newSize
                 currentRenderSize = renderedSize(in: newSize)
             }
+            .onChange(of: store.document.id) { _, _ in
+                currentRenderSize = renderedSize(in: geo.size)
+                // Reset zoom/pan for the new artwork
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentZoom = defaultZoom; lastZoom = defaultZoom
+                    offset = .zero; lastOffset = .zero
+                }
+            }
         }
         .clipped()
         .overlay(alignment: .bottom) {
@@ -877,9 +885,8 @@ struct SVGCanvasRenderer: View {
             if showNumbers, !isPeeking {
                 let showAllGroups = selectedGroupIndex == nil
                 let isLargeScreen = UIDevice.current.userInterfaceIdiom == .pad
-                // iPad: require more zoom to reveal numbers
-                let minVisible: CGFloat = showAllGroups ? (isLargeScreen ? 5 : 3) : (isLargeScreen ? 12 : 8)
-                let fullVisible: CGFloat = showAllGroups ? (isLargeScreen ? 9 : 6) : (isLargeScreen ? 18 : 14)
+                let minVisible: CGFloat = showAllGroups ? (isLargeScreen ? 5 : 3) : (isLargeScreen ? 4 : 3)
+                let fullVisible: CGFloat = showAllGroups ? (isLargeScreen ? 9 : 6) : (isLargeScreen ? 10 : 8)
 
                 struct LabelInfo {
                     let center: CGPoint
@@ -888,32 +895,31 @@ struct SVGCanvasRenderer: View {
                     let groupNumber: Int
                     let area: CGFloat
                     let needsPill: Bool
+                    let isOverview: Bool
                 }
 
-                // When no color selected, pick only the largest unfilled cluster per group
-                var bestClusterPerGroup: [Int: (cluster: ElementCluster, area: CGFloat)] = [:]
                 var candidateClusters: [ElementCluster] = []
-
-                for cluster in document.clusters {
-                    if let selIdx = selectedGroupIndex {
-                        guard cluster.groupIndex == selIdx else { continue }
+                if selectedGroupIndex != nil {
+                    for cluster in document.clusters {
+                        guard cluster.groupIndex == selectedGroupIndex! else { continue }
+                        let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
+                        guard hasUnfilled else { continue }
                         candidateClusters.append(cluster)
-                    } else {
+                    }
+                } else {
+                    let minArea: CGFloat = 1500
+                    var groupClusters: [Int: [(cluster: ElementCluster, area: CGFloat)]] = [:]
+                    for cluster in document.clusters {
                         let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                         guard hasUnfilled else { continue }
                         let area = cluster.bounds.width * cluster.bounds.height
-                        if let existing = bestClusterPerGroup[cluster.groupIndex] {
-                            if area > existing.area {
-                                bestClusterPerGroup[cluster.groupIndex] = (cluster, area)
-                            }
-                        } else {
-                            bestClusterPerGroup[cluster.groupIndex] = (cluster, area)
-                        }
+                        guard area >= minArea else { continue }
+                        groupClusters[cluster.groupIndex, default: []].append((cluster, area))
                     }
-                }
-
-                if showAllGroups {
-                    candidateClusters = bestClusterPerGroup.values.map { $0.cluster }
+                    for (_, clusters) in groupClusters {
+                        let top = clusters.sorted { $0.area > $1.area }.prefix(2)
+                        candidateClusters.append(contentsOf: top.map { $0.cluster })
+                    }
                 }
 
                 var labels: [LabelInfo] = []
@@ -927,8 +933,8 @@ struct SVGCanvasRenderer: View {
                         : cluster.groupIndex + 1
 
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
-                    let naturalSize = min(dim * 0.35, 60)
-                    let fontSize = max(naturalSize, CGFloat(24))
+                    let naturalSize = min(dim * 0.35, showAllGroups ? 48 : 60)
+                    let fontSize = max(naturalSize, CGFloat(showAllGroups ? 20 : 24))
                     let needsPill = naturalSize < 24
 
                     // Numbers require zoom to appear — search by color first,
@@ -945,7 +951,8 @@ struct SVGCanvasRenderer: View {
                         alpha: 0.9 * sizeAlpha,
                         groupNumber: groupNumber,
                         area: area,
-                        needsPill: needsPill
+                        needsPill: needsPill,
+                        isOverview: showAllGroups
                     ))
                 }
 
@@ -979,7 +986,18 @@ struct SVGCanvasRenderer: View {
 
                     placedRects.append(rect)
 
-                    let pillOpacity = label.needsPill ? 0.65 : 0.5
+                    let pillOpacity: Double
+                    let textWeight: Font.Weight
+                    let textOpacity: Double
+                    if label.isOverview {
+                        pillOpacity = (label.needsPill ? 0.25 : 0.18) * label.alpha
+                        textWeight = .medium
+                        textOpacity = 0.5 * label.alpha
+                    } else {
+                        pillOpacity = (label.needsPill ? 0.65 : 0.5) * label.alpha
+                        textWeight = .semibold
+                        textOpacity = label.alpha
+                    }
                     let pillW = label.fontSize * 1.1
                     let pillH = label.fontSize * 1.3
                     let pillRect = CGRect(
@@ -990,11 +1008,11 @@ struct SVGCanvasRenderer: View {
                     )
                     let pill = Path(roundedRect: pillRect,
                                     cornerRadius: label.fontSize * 0.3)
-                    ctx.fill(pill, with: .color(.black.opacity(pillOpacity * label.alpha)))
+                    ctx.fill(pill, with: .color(.black.opacity(pillOpacity)))
 
                     var text = AttributedString("\(label.groupNumber)")
-                    text.font = .system(size: label.fontSize, weight: .semibold, design: .rounded)
-                    text.foregroundColor = .white.opacity(label.alpha)
+                    text.font = .system(size: label.fontSize, weight: textWeight, design: .rounded)
+                    text.foregroundColor = .white.opacity(textOpacity)
 
                     ctx.draw(Text(text), at: center, anchor: .center)
                 }

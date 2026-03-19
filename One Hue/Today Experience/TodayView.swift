@@ -511,11 +511,16 @@ struct TodayView: View {
     private func armStuckTimer() {
         stuckTimer?.invalidate()
         stuckTimer = nil
-        // Only arm when few pieces remain globally and there are find uses left
         guard store.phase == .painting,
-              store.globalRemaining > 0,
-              store.globalRemaining <= 5,
               store.findUsesRemaining > 0 else { return }
+        let groupRemaining: Int
+        if let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count {
+            let group = store.document.groups[selIdx]
+            groupRemaining = group.elementIndices.filter { !store.filledElements.contains($0) }.count
+        } else {
+            groupRemaining = store.globalRemaining
+        }
+        guard groupRemaining > 0, groupRemaining <= 5 else { return }
         stuckTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { _ in
             Task { @MainActor in
                 guard store.phase == .painting, store.globalRemaining > 0 else { return }

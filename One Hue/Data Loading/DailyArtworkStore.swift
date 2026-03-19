@@ -221,14 +221,10 @@ final class ColoringStore: ObservableObject {
                 dingPlayer?.play()
             }
             justCompletedGroupIndex = groupIdx
-            // Clear after palette celebrates the completion, then deselect
-            // so all numbers reappear and user picks the next color
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+            selectedGroupIndex = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 guard self?.justCompletedGroupIndex == groupIdx else { return }
                 self?.justCompletedGroupIndex = nil
-                if self?.selectedGroupIndex == groupIdx {
-                    self?.selectedGroupIndex = nil
-                }
             }
         }
 
