@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct AppRootView: View {
+    @StateObject private var store = ColoringStore()
+
     var body: some View {
-        TodayView()
+        HomeView(store: store)
             .preferredColorScheme(.dark)
     }
 }

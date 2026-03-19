@@ -1242,7 +1242,7 @@ private final class DisplayLinkTarget: NSObject {
 
 #if DEBUG
 #Preview("Canvas") {
-    TodayView()
+    TodayView(store: ColoringStore())
         .preferredColorScheme(.dark)
 }
 #endif

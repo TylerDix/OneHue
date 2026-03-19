@@ -1,14 +1,14 @@
 import SwiftUI
 
 struct TodayView: View {
-    @StateObject private var store = ColoringStore()
+    @ObservedObject var store: ColoringStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     @State private var showSettings    = false
     @State private var showCompletion  = false
     @State private var skipReveal      = false
     @State private var showShareSheet  = false
-    @State private var showGallery     = false
     @State private var shareImage: UIImage? = nil
     @AppStorage("onehue.onboardingShown") private var onboardingShown = false
     @State private var showOnboarding = false
@@ -192,7 +192,7 @@ struct TodayView: View {
                     artworkID: store.currentArtwork.id,
                     completionService: CompletionService.shared,
                     onNext: { loadNextArtwork() },
-                    onGallery: { withAnimation { showCompletion = false }; showGallery = true },
+                    onGallery: { withAnimation { showCompletion = false }; dismiss() },
                     onShare: { shareCompletedArtwork() },
                     isTodayArtwork: store.currentArtworkIndex == Artwork.today().index,
                     skipReveal: skipReveal
@@ -287,10 +287,7 @@ struct TodayView: View {
             SettingsView(store: store)
                 .presentationDetents([.large])
         }
-        .sheet(isPresented: $showGallery) {
-            GalleryView(store: store)
-                .presentationDetents([.large])
-        }
+        // Gallery is now the home screen — no sheet needed
         .sheet(isPresented: $showShareSheet) {
             if let image = shareImage {
                 ShareSheet(items: [image, "One Hue — \(store.currentArtwork.displayName)"])
@@ -318,21 +315,16 @@ struct TodayView: View {
 
     private var header: some View {
         HStack {
-            if !isOnTodayArtwork {
-                Button {
-                    skipReveal = true
-                    store.loadArtwork(at: Artwork.today().index)
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .frame(width: 36, height: 36)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .transition(.opacity)
-                .accessibilityLabel("Return to today's artwork")
+            // Back to gallery — NavigationStack handles back gesture
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back to Gallery")
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -412,7 +404,7 @@ struct TodayView: View {
 //                .transition(.opacity)
 //            }
 
-            Button { showGallery = true } label: {
+            Button { dismiss() } label: {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
@@ -421,7 +413,7 @@ struct TodayView: View {
                     .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Gallery")
+            .accessibilityLabel("Back to Gallery")
 
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
@@ -719,7 +711,7 @@ private struct FeatureTip: View {
 // MARK: - Previews
 
 #Preview("Pristine") {
-    TodayView().preferredColorScheme(.dark)
+    TodayView(store: ColoringStore()).preferredColorScheme(.dark)
 }
 
 #Preview("Onboarding") {

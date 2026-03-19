@@ -22,36 +22,8 @@ struct GalleryView: View {
 
     // MARK: - Month-sectioned data
 
-    private struct MonthSection: Identifiable {
-        let month: Int
-        let name: String
-        let artworks: [(index: Int, artwork: Artwork)]
-        var id: Int { month }
-    }
-
-    private var sections: [MonthSection] {
-        let todayOrd = currentDayOrdinal()
-
-        let available: [(Int, Artwork)] = Artwork.catalog.enumerated().compactMap { index, artwork in
-            // Only show artworks whose anchor date has arrived
-            guard artworkOrdinal(artwork) <= todayOrd else { return nil }
-
-            let completed = ColoringStore.isArtworkCompleted(artwork.id)
-            switch filter {
-            case .all:        return (index, artwork)
-            case .completed:  return completed ? (index, artwork) : nil
-            case .inProgress: return !completed ? (index, artwork) : nil
-            }
-        }
-
-        let grouped = Dictionary(grouping: available) { $0.1.month }
-        return grouped.keys.sorted().map { month in
-            MonthSection(
-                month: month,
-                name: Self.monthName(for: month),
-                artworks: grouped[month]!.map { (index: $0.0, artwork: $0.1) }
-            )
-        }
+    private var sections: [GalleryMonthSection] {
+        GalleryMonthSection.buildSections(filter: filter)
     }
 
     var body: some View {
@@ -164,19 +136,51 @@ struct GalleryView: View {
         countdownText = "Next artwork in \(h)h \(m)m"
     }
 
-    // MARK: - Date Helpers
+    // Date helpers moved to GalleryMonthSection
+}
 
-    private func currentDayOrdinal() -> Int {
+// MARK: - Shared Section Model
+
+struct GalleryMonthSection: Identifiable {
+    let month: Int
+    let name: String
+    let artworks: [(index: Int, artwork: Artwork)]
+    var id: Int { month }
+
+    static func buildSections(filter: GalleryFilter) -> [GalleryMonthSection] {
+        let todayOrd = currentDayOrdinal()
+
+        let available: [(Int, Artwork)] = Artwork.catalog.enumerated().compactMap { index, artwork in
+            guard artworkOrdinal(artwork) <= todayOrd else { return nil }
+            let completed = ColoringStore.isArtworkCompleted(artwork.id)
+            switch filter {
+            case .all:        return (index, artwork)
+            case .completed:  return completed ? (index, artwork) : nil
+            case .inProgress: return !completed ? (index, artwork) : nil
+            }
+        }
+
+        let grouped = Dictionary(grouping: available) { $0.1.month }
+        return grouped.keys.sorted().map { month in
+            GalleryMonthSection(
+                month: month,
+                name: monthName(for: month),
+                artworks: grouped[month]!.map { (index: $0.0, artwork: $0.1) }
+            )
+        }
+    }
+
+    private static func currentDayOrdinal() -> Int {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         let now = Date()
         let m = cal.component(.month, from: now)
         let d = cal.component(.day, from: now)
-        return Self.dayOrdinal(month: m, day: d)
+        return dayOrdinal(month: m, day: d)
     }
 
-    private func artworkOrdinal(_ artwork: Artwork) -> Int {
-        Self.dayOrdinal(month: artwork.month, day: artwork.day)
+    private static func artworkOrdinal(_ artwork: Artwork) -> Int {
+        dayOrdinal(month: artwork.month, day: artwork.day)
     }
 
     private static func dayOrdinal(month: Int, day: Int) -> Int {
@@ -198,7 +202,7 @@ struct GalleryView: View {
 
 // MARK: - Cell
 
-private struct GalleryCell: View {
+struct GalleryCell: View {
     let artwork: Artwork
     let index: Int
     let isCurrent: Bool
