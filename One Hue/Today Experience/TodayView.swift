@@ -572,7 +572,8 @@ struct TodayView: View {
                     zoomLevel: 1.0,
                     activeAnimations: [],
                     flashTick: 0,
-                    pulsePhase: 0
+                    pulsePhase: 0,
+                    strokeDissolve: 0
                 )
                 .frame(width: canvasWidth, height: canvasHeight)
 

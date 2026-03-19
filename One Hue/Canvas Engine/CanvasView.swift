@@ -38,6 +38,7 @@ struct CanvasView: View {
 
     // Phase animation
     @State private var showNumbers: Bool = true
+    @State private var strokeDissolve: CGFloat = 1.0
 
     // Blob fill animation
     @State private var activeAnimations: [FillAnimation] = []
@@ -86,7 +87,8 @@ struct CanvasView: View {
                     zoomLevel: currentZoom / defaultZoom,
                     activeAnimations: activeAnimations,
                     flashTick: flashTick,
-                    pulsePhase: pulsePhase
+                    pulsePhase: pulsePhase,
+                    strokeDissolve: strokeDissolve
                 )
                 .frame(width: renderSize.width, height: renderSize.height)
 
@@ -209,6 +211,7 @@ struct CanvasView: View {
     private func animate(to phase: ArtworkPhase) {
         switch phase {
         case .painting:
+            strokeDissolve = 1.0
             withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
                 showNumbers = true
                 currentZoom = defaultZoom; lastZoom = defaultZoom
@@ -217,6 +220,7 @@ struct CanvasView: View {
 
         case .complete:
             withAnimation(.easeOut(duration: 1.0)) { showNumbers = false }
+            withAnimation(.easeOut(duration: 1.2)) { strokeDissolve = 0.0 }
         }
     }
 
@@ -846,6 +850,7 @@ struct SVGCanvasRenderer: View {
     let activeAnimations: [FillAnimation]
     let flashTick: UInt  // drives re-renders during blob animation
     let pulsePhase: Double  // 0 = no pulse, >0 = seconds into breathing animation
+    let strokeDissolve: CGFloat  // 1.0 = visible boundary lines, 0.0 = dissolved (seamless art)
 
     private static let blobDuration: TimeInterval = 0.6
 
@@ -898,9 +903,14 @@ struct SVGCanvasRenderer: View {
             // Pre-compute muted colors once per frame (avoids UIColor HSB conversion per element)
             var mutedSel: [Int: Color] = [:]
             var mutedOther: [Int: Color] = [:]
+            var mutedOverview: [Int: Color] = [:]
+            let noSelection = selectedGroupIndex == nil
             for group in document.groups {
                 mutedSel[group.id] = Self.computeMuted(group.color, selected: true)
                 mutedOther[group.id] = Self.computeMuted(group.color, selected: false)
+                if noSelection {
+                    mutedOverview[group.id] = Self.computeMutedOverview(group.color)
+                }
             }
 
             // Pass 1: Fill all elements (with blob reveal for active animations)
@@ -942,7 +952,7 @@ struct SVGCanvasRenderer: View {
                     } else {
                         // Draw muted base, then clip-reveal filled color
                         let isSelected = groupIdx == selectedGroupIndex
-                        let muted = (isSelected ? mutedSel[groupIdx] : mutedOther[groupIdx]) ?? .gray
+                        let muted = (noSelection ? mutedOverview[groupIdx] : (isSelected ? mutedSel[groupIdx] : mutedOther[groupIdx])) ?? .gray
                         ctx.fill(path, with: .color(muted))
                         ctx.stroke(path, with: .color(muted), style: gapStroke)
 
@@ -964,9 +974,22 @@ struct SVGCanvasRenderer: View {
 
                 } else {
                     let isSelected = groupIdx == selectedGroupIndex
-                    let muted = (isSelected ? mutedSel[groupIdx] : mutedOther[groupIdx]) ?? .gray
+                    let muted = (noSelection ? mutedOverview[groupIdx] : (isSelected ? mutedSel[groupIdx] : mutedOther[groupIdx])) ?? .gray
                     ctx.fill(path, with: .color(muted))
                     ctx.stroke(path, with: .color(muted), style: gapStroke)
+                }
+            }
+
+            // Pass 1.25: Coloring-page boundary lines on all grouped elements.
+            // Visible during painting, dissolves away on completion to reveal seamless art.
+            if strokeDissolve > 0.001 {
+                let boundaryWidth: CGFloat = 0.5
+                let boundaryStyle = StrokeStyle(lineWidth: boundaryWidth, lineJoin: .round)
+                let boundaryOpacity = 0.12 * strokeDissolve
+                for element in document.elements {
+                    guard document.elementGroupMap[element.id] != nil else { continue }
+                    let path = Path(element.path)
+                    ctx.stroke(path, with: .color(.black.opacity(boundaryOpacity)), style: boundaryStyle)
                 }
             }
 
@@ -1191,6 +1214,18 @@ struct SVGCanvasRenderer: View {
                          saturation: Double(s * 0.06),
                          brightness: Double(baseBrightness * 0.15))
         }
+    }
+
+    /// Warmer muted color for the "no color selected" overview state.
+    /// Brighter than the unselected muted so the artwork is readable on initial load.
+    private static func computeMutedOverview(_ color: Color) -> Color {
+        let uiColor = UIColor(color)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let baseBrightness = max(b, 0.35)
+        return Color(hue: Double(h),
+                     saturation: Double(s * 0.18),
+                     brightness: Double(baseBrightness * 0.32))
     }
 }
 
