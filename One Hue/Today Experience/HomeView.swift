@@ -103,7 +103,7 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(isPresented: $coloringActive) {
-                TodayView(store: store)
+                TodayView(store: store, coloringActive: $coloringActive)
                     .navigationBarHidden(true)
             }
         }

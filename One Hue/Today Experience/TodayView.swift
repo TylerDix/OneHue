@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodayView: View {
     @ObservedObject var store: ColoringStore
+    @Binding var coloringActive: Bool
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
 
@@ -192,7 +193,7 @@ struct TodayView: View {
                     artworkID: store.currentArtwork.id,
                     completionService: CompletionService.shared,
                     onNext: { loadNextArtwork() },
-                    onGallery: { withAnimation { showCompletion = false }; dismiss() },
+                    onGallery: { showCompletion = false; coloringActive = false },
                     onShare: { shareCompletedArtwork() },
                     isTodayArtwork: store.currentArtworkIndex == Artwork.today().index,
                     skipReveal: skipReveal
@@ -393,7 +394,7 @@ struct TodayView: View {
 //                .transition(.opacity)
 //            }
 
-            Button { dismiss() } label: {
+            Button { coloringActive = false } label: {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
@@ -700,7 +701,7 @@ private struct FeatureTip: View {
 // MARK: - Previews
 
 #Preview("Pristine") {
-    TodayView(store: ColoringStore()).preferredColorScheme(.dark)
+    TodayView(store: ColoringStore(), coloringActive: .constant(true)).preferredColorScheme(.dark)
 }
 
 #Preview("Onboarding") {

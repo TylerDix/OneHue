@@ -54,8 +54,9 @@ struct CanvasView: View {
     // "Pick a color" nudge
     @State private var showColorNudge: Bool = false
 
-    // Peek wobble — hints that panning exists on first ever load
+    // Peek wobble — hints that panning exists on first 3 artworks only
     @State private var hasWobbled: Bool = false
+    @AppStorage("onehue.wobbleCount") private var wobbleCount: Int = 0
 
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 8.0
@@ -688,8 +689,9 @@ struct CanvasView: View {
     /// Horizontal wobble to hint that the canvas is pannable.
     /// Fires every time an artwork is opened.
     private func peekWobbleIfNeeded() {
-        guard !hasWobbled else { return }
+        guard !hasWobbled, wobbleCount < 3 else { return }
         hasWobbled = true
+        wobbleCount += 1
 
         let drift: CGFloat = 18
         // Slight delay so the artwork is fully visible first
@@ -1239,7 +1241,7 @@ private final class DisplayLinkTarget: NSObject {
 
 #if DEBUG
 #Preview("Canvas") {
-    TodayView(store: ColoringStore())
+    TodayView(store: ColoringStore(), coloringActive: .constant(true))
         .preferredColorScheme(.dark)
 }
 #endif
