@@ -1193,38 +1193,52 @@ struct SVGCanvasRenderer: View {
         }
     }
 
-    // MARK: - Color Helpers
+    // MARK: - Color Helpers (cached to avoid UIColor HSB conversion every frame)
+
+    private static var mutedCache: [UInt64: Color] = [:]
+
+    private static func cacheKey(_ color: Color, mode: UInt8) -> UInt64 {
+        UInt64(color.hashValue) &+ UInt64(mode)
+    }
 
     private static func computeMuted(_ color: Color, selected: Bool) -> Color {
+        let key = cacheKey(color, mode: selected ? 1 : 0)
+        if let cached = mutedCache[key] { return cached }
+
         let uiColor = UIColor(color)
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
 
         let baseBrightness = max(b, 0.35)
+        let result: Color
 
         if selected {
-            // Warm color whisper — clearly shows "this color goes here"
-            return Color(hue: Double(h),
+            result = Color(hue: Double(h),
                          saturation: Double(s * 0.55),
                          brightness: Double(baseBrightness * 0.65))
         } else {
-            // Nearly invisible — fades into the dark canvas
-            return Color(hue: Double(h),
+            result = Color(hue: Double(h),
                          saturation: Double(s * 0.06),
                          brightness: Double(baseBrightness * 0.15))
         }
+        mutedCache[key] = result
+        return result
     }
 
     /// Warmer muted color for the "no color selected" overview state.
-    /// Brighter than the unselected muted so the artwork is readable on initial load.
     private static func computeMutedOverview(_ color: Color) -> Color {
+        let key = cacheKey(color, mode: 2)
+        if let cached = mutedCache[key] { return cached }
+
         let uiColor = UIColor(color)
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
         let baseBrightness = max(b, 0.35)
-        return Color(hue: Double(h),
+        let result = Color(hue: Double(h),
                      saturation: Double(s * 0.12),
                      brightness: Double(baseBrightness * 0.23))
+        mutedCache[key] = result
+        return result
     }
 }
 

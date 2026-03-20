@@ -76,6 +76,7 @@ struct HomeView: View {
                                             isCurrent: item.index == store.currentArtworkIndex,
                                             isToday: item.index == todayIndex
                                         ) {
+                                            store.playBloop()
                                             store.loadArtwork(at: item.index)
                                             coloringActive = true
                                         }
@@ -112,8 +113,11 @@ struct HomeView: View {
                 .presentationDetents([.large])
         }
         .onAppear {
-            SVGDocumentCache.shared.preloadAll()
             updateCountdown()
+            // Defer preload so gallery animates in first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                SVGDocumentCache.shared.preloadAll()
+            }
             timerCancellable = timer.connect()
         }
         .onDisappear {
@@ -133,6 +137,7 @@ struct HomeView: View {
         let isCompleted = ColoringStore.isArtworkCompleted(todayArtwork.id)
 
         return Button {
+            store.playBloop()
             store.loadArtwork(at: todayIndex)
             coloringActive = true
         } label: {

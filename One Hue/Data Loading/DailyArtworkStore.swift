@@ -38,6 +38,21 @@ final class ColoringStore: ObservableObject {
     private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
     private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
 
+    /// Cached sound-enabled flag — avoids UserDefaults disk reads on every tap
+    /// Refreshed via UserDefaults.didChangeNotification when settings toggle fires.
+    private var soundEnabled: Bool = {
+        UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled")
+    }()
+
+    private var soundObserver: NSObjectProtocol? = nil
+
+    private func observeSoundSetting() {
+        guard soundObserver == nil else { return }
+        soundObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.soundEnabled = UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled")
+        }
+    }
+
     private var fillPlayer: AVAudioPlayer? = {
         // .ambient respects the silent switch and mixes with other audio
         try? AVAudioSession.sharedInstance().setCategory(.ambient)
@@ -63,6 +78,15 @@ final class ColoringStore: ObservableObject {
         return player
     }()
 
+
+    /// Play the boop sound + light haptic — for UI button feedback
+    func playBloop() {
+        lightHaptic.impactOccurred()
+        if soundEnabled {
+            fillPlayer?.currentTime = 0
+            fillPlayer?.play()
+        }
+    }
 
     // MARK: - Derived
 
@@ -125,6 +149,7 @@ final class ColoringStore: ObservableObject {
     // MARK: - Artwork Switching
 
     func loadArtwork(at index: Int) {
+        observeSoundSetting()
         persistNow() // flush before switching
         autoCompleteEnabled = false
         finishTimer?.invalidate(); finishTimer = nil; finishQueue.removeAll()
@@ -205,7 +230,7 @@ final class ColoringStore: ObservableObject {
 
         // Sound + haptic fire BEFORE fill mutation for snappier feedback
         lightHaptic.impactOccurred()
-        if UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled") {
+        if soundEnabled {
             fillPlayer?.currentTime = 0
             fillPlayer?.play()
         }
@@ -223,7 +248,7 @@ final class ColoringStore: ObservableObject {
         // Celebrate group completion — user picks next color manually (like HC)
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
             mediumHaptic.impactOccurred()
-            if UserDefaults.standard.object(forKey: "onehue.soundEnabled") == nil || UserDefaults.standard.bool(forKey: "onehue.soundEnabled") {
+            if soundEnabled {
                 dingPlayer?.currentTime = 0
                 dingPlayer?.play()
             }
