@@ -12,3 +12,12 @@ xcuserdata/
 # macOS
 .DS_Store
 *.swp
+Artworks_backup_pretrim/
+build_ipad/
+originals_link
+screenshots/
+tools/thumbnails/
+tools/contact_sheets/
+tools/fingerprints.json
+tools/mismatches_raw.txt
+*.pages

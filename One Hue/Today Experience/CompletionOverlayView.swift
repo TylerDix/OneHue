@@ -26,7 +26,7 @@ struct CompletionOverlayView: View {
 
     // Feedback state
     /// Toggle for testing: true = 5-star rating, false = thumbs up/down (production)
-    private static let useStarRating = true
+    private static let useStarRating = false
     @State private var feedbackSubmitted = false
     @State private var starRating: Int = 0
     @State private var starComment: String = ""

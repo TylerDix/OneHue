@@ -568,8 +568,8 @@ final class ColoringStore: ObservableObject {
 
     func debugForceComplete() {
         autoCompleteEnabled = false
+        completionPending = false          // reset in case of prior attempt
         filledElements = document.groupedIndices
-        phase = .complete
         Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
     }
 

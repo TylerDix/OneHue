@@ -212,15 +212,15 @@ struct AboutView: View {
                     Text("One Hue")
                         .font(.system(size: 32, weight: .light, design: .serif))
                         .foregroundStyle(.white.opacity(0.9))
-                    Text("One image. One palette. One moment.")
+                    Text("One artwork. One color at a time.")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
                 VStack(spacing: 16) {
-                    aboutParagraph("Each day, a new image appears. Bring it to life one color at a time. No clock, no score\u{00A0}— just you and\u{00A0}the\u{00A0}colors.")
-                    aboutParagraph("There are no streaks, no leaderboards, no points. No ads, no accounts, no profiles. Nothing to optimize. Just a single act of\u{00A0}focus\u{00A0}and\u{00A0}beauty.")
-                    aboutParagraph("The intent is simple: one moment of sustained attention in a world that takes it from\u{00A0}you\u{00A0}constantly.")
+                    aboutParagraph("A new image appears each day. You fill it in, one hue at a\u{00A0}time. That\u{00A0}is\u{00A0}the\u{00A0}whole\u{00A0}game.")
+                    aboutParagraph("No ads. No accounts. No streaks. No algorithm deciding what you deserve. Just color, quiet, and the occasional\u{00A0}sarcastic\u{00A0}remark.")
+                    aboutParagraph("Made by one person who wanted something calm to do with\u{00A0}his\u{00A0}hands.")
                 }
                 .padding(.horizontal, 28)
 
