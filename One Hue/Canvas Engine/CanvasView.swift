@@ -853,12 +853,12 @@ struct SVGCanvasRenderer: View {
 
     private static let blobDuration: TimeInterval = 0.6
 
-    // MARK: - Checkerboard Tile
+    // MARK: - Checkerboard Tiles
 
-    /// 24×24 px checkerboard image (12 SVG-unit cells — tight pattern that
-    /// reads as texture without blending into light-colored regions)
-    private static let checkerImage: Image = {
-        let cell = 12
+    /// Dense 6-SVG-unit checkerboard (4× tighter than before).
+    /// Two variants so the pattern pops on any background color.
+    private static func makeCheckerImage(r: CGFloat, g: CGFloat, b: CGFloat, alpha: CGFloat) -> Image {
+        let cell = 6
         let size = cell * 2
         let space = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(
@@ -868,12 +868,31 @@ struct SVGCanvasRenderer: View {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return Image(systemName: "checkerboard.rectangle") }
         ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.10))
+        ctx.setFillColor(CGColor(red: r, green: g, blue: b, alpha: alpha))
         ctx.fill(CGRect(x: 0, y: 0, width: cell, height: cell))
         ctx.fill(CGRect(x: cell, y: cell, width: cell, height: cell))
         guard let cgImage = ctx.makeImage() else { return Image(systemName: "checkerboard.rectangle") }
         return Image(decorative: cgImage, scale: 1)
-    }()
+    }
+
+    /// Light checker (white squares) — for dark group colors
+    private static let checkerImageLight = makeCheckerImage(r: 1, g: 1, b: 1, alpha: 0.18)
+    /// Dark checker (dark gray squares) — for light/white group colors
+    private static let checkerImageDark  = makeCheckerImage(r: 0, g: 0, b: 0, alpha: 0.22)
+
+    /// Returns true when a color is light enough that white overlays would be invisible.
+    /// Cached to avoid UIColor HSB conversion every frame.
+    private static var lightColorCache: [Int: Bool] = [:]
+    private static func isLightColor(_ color: Color) -> Bool {
+        let key = color.hashValue
+        if let cached = lightColorCache[key] { return cached }
+        let ui = UIColor(color)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ui.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let result = b > 0.75 && s < 0.35
+        lightColorCache[key] = result
+        return result
+    }
 
     // MARK: - Body
 
@@ -1007,48 +1026,36 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 2: Checkerboard on selected group's unfilled elements
-            if showNumbers, !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
-                let selectedGroup = document.groups[selIdx]
-                var combinedPath = Path()
-                for idx in selectedGroup.elementIndices {
-                    guard !filledElements.contains(idx) else { continue }
-                    combinedPath.addPath(Path(document.elements[idx].path))
-                }
-
-                if !combinedPath.isEmpty {
-                    ctx.drawLayer { layerCtx in
-                        layerCtx.clip(to: combinedPath)
-                        layerCtx.fill(
-                            Path(vb),
-                            with: .tiledImage(Self.checkerImage)
-                        )
-                    }
-
-                    // Thin outline on selected group paths
-                    ctx.stroke(combinedPath,
-                               with: .color(.white.opacity(0.15)),
-                               lineWidth: 0.8 / scale)
-                }
-            }
-
-            // Pass 2.5: Breathing pulse on ALL unfilled regions of the selected group.
-            // Flashes every remaining piece so the user can spot stragglers at any zoom.
-            if pulsePhase > 0, !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
+            // Pass 2 + 2.5: Checkerboard overlay and breathing pulse on selected group's unfilled elements.
+            // Combined into one block to avoid building the same path twice.
+            if !isPeeking, let selIdx = selectedGroupIndex, selIdx < document.groups.count {
                 let selectedGroup = document.groups[selIdx]
 
-                // Breathing sine wave: 0→1→0 over ~1.5s, repeated
-                let breath = sin(pulsePhase * .pi * 1.3)
-                let alpha = max(breath, 0) * 0.55  // peak 55% — must pop even on light colors
-
-                // Build combined path from ALL unfilled elements in the selected group
-                var allUnfilledPath = Path()
+                // Build unfilled path once, reuse for both passes
+                var unfilledPath = Path()
                 for idx in selectedGroup.elementIndices where !filledElements.contains(idx) {
-                    allUnfilledPath.addPath(Path(document.elements[idx].path))
+                    unfilledPath.addPath(Path(document.elements[idx].path))
                 }
 
-                if !allUnfilledPath.isEmpty {
-                    ctx.fill(allUnfilledPath, with: .color(selectedGroup.color.opacity(alpha)))
+                let light = Self.isLightColor(selectedGroup.color)
+
+                // Pass 2: Dense checkerboard — dark checks on light colors, light on dark
+                if showNumbers, !unfilledPath.isEmpty {
+                    let checker = light ? Self.checkerImageDark : Self.checkerImageLight
+                    ctx.drawLayer { layerCtx in
+                        layerCtx.clip(to: unfilledPath)
+                        layerCtx.fill(Path(vb), with: .tiledImage(checker))
+                    }
+                    let strokeColor: Color = light ? .black.opacity(0.18) : .white.opacity(0.15)
+                    ctx.stroke(unfilledPath, with: .color(strokeColor), lineWidth: 0.8 / scale)
+                }
+
+                // Pass 2.5: Breathing pulse — dark flash for light colors, bright for dark
+                if pulsePhase > 0, !unfilledPath.isEmpty {
+                    let breath = sin(pulsePhase * .pi * 1.3)
+                    let alpha = max(breath, 0) * (light ? 0.35 : 0.55)
+                    let pulseColor: Color = light ? .black : selectedGroup.color
+                    ctx.fill(unfilledPath, with: .color(pulseColor.opacity(alpha)))
                 }
             }
 
