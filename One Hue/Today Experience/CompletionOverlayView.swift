@@ -25,8 +25,20 @@ struct CompletionOverlayView: View {
     @State private var showNextButton = false
 
     // Feedback state
-    /// Toggle for testing: true = 5-star rating, false = thumbs up/down (production)
-    private static let useStarRating = false
+    // ───────────────────────────────────────────────────────────────
+    // Feedback mode: star rating vs thumbs up/down.
+    //   • Star rating (true):  5-star selector + optional comment field.
+    //                           Better signal during TestFlight beta.
+    //   • Thumbs up/down (false): Binary like (→ rating 5) / dislike (→ rating 1).
+    //                              Simpler for production post-launch.
+    // Toggle via TesterPanel "Star Rating" switch in DEBUG builds,
+    // or flip this default for release builds.
+    // ───────────────────────────────────────────────────────────────
+    #if DEBUG
+    private var useStarRating: Bool { DebugSettings.shared.useStarRating }
+    #else
+    private let useStarRating = true
+    #endif
     @State private var feedbackSubmitted = false
     @State private var starRating: Int = 0
     @State private var starComment: String = ""
@@ -112,7 +124,7 @@ struct CompletionOverlayView: View {
 
             // Inline feedback
             if showFeedback && !alreadyRated && !feedbackSubmitted {
-                if Self.useStarRating {
+                if useStarRating {
                     // Star rating (testing)
                     VStack(spacing: 12) {
                         HStack(spacing: 10) {
@@ -159,7 +171,13 @@ struct CompletionOverlayView: View {
                     }
                     .transition(Self.fadeRise)
                 } else {
-                    // Thumbs up/down (production)
+                    // ── Thumbs up/down (production fallback) ──────────────
+                    // Simpler binary feedback for post-launch.
+                    //   👍 → submits rating = 5 (like)
+                    //   👎 → submits rating = 1 (dislike)
+                    // To switch back: set useStarRating = false in release,
+                    // or toggle "Star Rating" off in TesterPanel (DEBUG).
+                    // ──────────────────────────────────────────────────────
                     HStack(spacing: 20) {
                         Button { submitRating(5) } label: {
                             Image(systemName: "hand.thumbsup")

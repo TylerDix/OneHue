@@ -145,6 +145,12 @@ struct TesterPanelView: View {
             }
             .tint(.red)
 
+            Button("Nearly Complete (5 left)") {
+                store.debugNearlyComplete()
+                dismiss()
+            }
+            .tint(.orange)
+
             Button("Fill All (instant complete)") {
                 store.fillAll()
             }
@@ -167,6 +173,10 @@ struct TesterPanelView: View {
             Toggle("Tiny Grab", isOn: Binding(
                 get: { !store.debugDisableTinyGrab },
                 set: { store.debugDisableTinyGrab = !$0 }
+            ))
+            Toggle("Star Rating (vs Thumbs)", isOn: Binding(
+                get: { DebugSettings.shared.useStarRating },
+                set: { DebugSettings.shared.useStarRating = $0 }
             ))
         }
     }

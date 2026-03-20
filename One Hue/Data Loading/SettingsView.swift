@@ -9,8 +9,6 @@ struct SettingsView: View {
     @AppStorage("onehue.dailyReminder") private var dailyReminderEnabled = false
     @AppStorage("onehue.soundEnabled") private var soundEnabled = true
     @State private var showAbout = false
-    @State private var debugTapCount = 0
-    @State private var showDebug = false
 
     var body: some View {
         NavigationStack {
@@ -80,77 +78,8 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
-                    .onTapGesture {
-                        debugTapCount += 1
-                        if debugTapCount >= 5 {
-                            withAnimation { showDebug = true }
-                        }
-                    }
                 }
-
-                // Hidden debug (only after 5-tap)
-                if showDebug {
-                    Section("Dev") {
-                        VStack(spacing: 10) {
-                            HStack {
-                                Button { store.previousArtwork() } label: {
-                                    Image(systemName: "chevron.left")
-                                        .frame(width: 32, height: 32)
-                                }
-                                .buttonStyle(.bordered)
-
-                                Text(store.document.title)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity)
-
-                                Button { store.nextArtwork() } label: {
-                                    Image(systemName: "chevron.right")
-                                        .frame(width: 32, height: 32)
-                                }
-                                .buttonStyle(.bordered)
-                            }
-
-                            Button("Nearly Complete (5 left)") {
-                                store.debugNearlyComplete()
-                                dismiss()
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-
-                            Button("Force Complete") {
-                                store.debugForceComplete()
-                                dismiss()
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-
-                            Button(role: .destructive) {
-                                store.resetProgress()
-                            } label: {
-                                Text("Reset Progress")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-
-                            LabeledContent("Elements") {
-                                Text("\(store.filledElements.count) / \(store.document.totalElements)")
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            LabeledContent("Groups") {
-                                Text("\(store.document.groups.count)")
-                                    .foregroundStyle(.secondary)
-                            }
-                            LabeledContent("Phase") {
-                                Text(String(describing: store.phase))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .transition(.opacity)
-                }
+                // Debug tools moved to TesterPanel (double-tap gear icon).
 
             }
             .scrollContentBackground(.hidden)
