@@ -67,6 +67,9 @@ struct CanvasView: View {
     /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
     private var defaultZoom: CGFloat { 1.0 }
 
+    /// Extra scrollable area beyond artwork edges (fraction of viewport).
+    private let edgePadding: CGFloat = 0.20
+
     private var contentOverflows: Bool {
         guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
         return currentRenderSize.width * currentZoom > viewportSize.width + 1 ||
@@ -249,11 +252,13 @@ struct CanvasView: View {
                     gestureIsPan = true
                     pendingFillLocation = nil  // cancel any pending fill
                     if contentOverflows {
-                        // Allow panning with rubber-band at edges
+                        // Allow panning with rubber-band at padded edges
                         let rawX = lastOffset.width  + value.translation.width
                         let rawY = lastOffset.height + value.translation.height
-                        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
-                        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+                        let padX = viewportSize.width * edgePadding
+                        let padY = viewportSize.height * edgePadding
+                        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2 + padX)
+                        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2 + padY)
                         withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
                             offset = CGSize(
                                 width:  Self.rubberBand(rawX, limit: maxX),
@@ -531,46 +536,40 @@ struct CanvasView: View {
                 }
                 lastZoomTime = now
 
-                // Interpolated zoom — gives the buttery smooth feel
-                withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
-                    if currentZoom > 0.01 {
-                        let scale = newZoom / currentZoom
-                        offset = CGSize(
-                            width:  offset.width  * scale,
-                            height: offset.height * scale
-                        )
-                    }
-                    currentZoom = newZoom
-                }
-            }
-            .onEnded { _ in
-                // Apply momentum: project zoom forward based on velocity
-                let momentumDuration: CGFloat = 0.5
-                var projectedZoom = currentZoom * (1.0 + zoomVelocity * momentumDuration)
-                // Clamp to hard limits
-                projectedZoom = min(max(projectedZoom, minZoom), maxZoom)
-
-                let scale = projectedZoom / max(currentZoom, 0.01)
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.58)) {
+                // Direct zoom — no spring, tracks finger exactly
+                if currentZoom > 0.01 {
+                    let scale = newZoom / currentZoom
                     offset = CGSize(
                         width:  offset.width  * scale,
                         height: offset.height * scale
                     )
-                    currentZoom = projectedZoom
+                }
+                currentZoom = newZoom
+            }
+            .onEnded { _ in
+                // Clamp to hard limits — smooth settle, no bounce
+                let clampedZoom = min(max(currentZoom, minZoom), maxZoom)
+                let scale = clampedZoom / max(currentZoom, 0.01)
+                withAnimation(.easeOut(duration: 0.2)) {
+                    offset = CGSize(
+                        width:  offset.width  * scale,
+                        height: offset.height * scale
+                    )
+                    currentZoom = clampedZoom
                 }
 
-                lastZoom = projectedZoom
+                lastZoom = clampedZoom
                 lastOffset = offset
                 zoomVelocity = 0
 
-                // Clamp offset after spring settles
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Clamp offset after settle
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     clampOffset()
                 }
 
                 // Brief delay before re-enabling fills to prevent accidental
                 // fill from finger lift at the end of a pinch
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     isZooming = false
                 }
             }
@@ -583,9 +582,11 @@ struct CanvasView: View {
                 let rawX = lastOffset.width  + value.translation.width
                 let rawY = lastOffset.height + value.translation.height
 
-                // Rubber-band: allow overshoot past edges with resistance
-                let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
-                let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+                // Rubber-band: allow overshoot past padded edges with resistance
+                let padX = viewportSize.width * edgePadding
+                let padY = viewportSize.height * edgePadding
+                let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2 + padX)
+                let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2 + padY)
                 withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
                     offset = CGSize(
                         width:  Self.rubberBand(rawX, limit: maxX),
@@ -626,16 +627,20 @@ struct CanvasView: View {
 
     /// Clamp offset values without animation — call inside withAnimation blocks.
     private func clampOffsetValues() {
-        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
-        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+        let padX = viewportSize.width * edgePadding
+        let padY = viewportSize.height * edgePadding
+        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2 + padX)
+        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2 + padY)
         offset.width  = min(max(offset.width,  -maxX), maxX)
         offset.height = min(max(offset.height, -maxY), maxY)
     }
 
     /// Hard clamp during active drag — no animation, no rubber-banding.
     private func clampOffsetImmediate() {
-        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
-        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+        let padX = viewportSize.width * edgePadding
+        let padY = viewportSize.height * edgePadding
+        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2 + padX)
+        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2 + padY)
         offset.width  = min(max(offset.width,  -maxX), maxX)
         offset.height = min(max(offset.height, -maxY), maxY)
         #if DEBUG
@@ -645,8 +650,10 @@ struct CanvasView: View {
 
     /// Animated clamp for zoom end — gentle settle after pinch release.
     private func clampOffset() {
-        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
-        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+        let padX = viewportSize.width * edgePadding
+        let padY = viewportSize.height * edgePadding
+        let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2 + padX)
+        let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2 + padY)
         withAnimation(.easeOut(duration: 0.15)) {
             offset.width  = min(max(offset.width,  -maxX), maxX)
             offset.height = min(max(offset.height, -maxY), maxY)
