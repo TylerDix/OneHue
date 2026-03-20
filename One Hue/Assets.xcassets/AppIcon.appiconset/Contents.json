@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "Firefly_GeminiFlash_I want to touch up the first pic with the zoomed in owl face. zoom in a touch more an 11398540.png",
+      "filename" : "finalAppIcon 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "Firefly_GeminiFlash_I want to touch up the first pic with the zoomed in owl face. zoom in a touch more an 11398539.png",
+      "filename" : "finalAppIcon 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +25,7 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "Firefly_GeminiFlash_I want to touch up the first pic with the zoomed in owl face. zoom in a touch more an 11398538.png",
+      "filename" : "finalAppIcon.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -76,7 +76,7 @@
       "size" : "512x512"
     },
     {
-      "filename" : "Firefly_GeminiFlash_I want to touch up the first pic with the zoomed in owl face. zoom in a touch more an 11398541.png",
+      "filename" : "finalAppIcon 3.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"
