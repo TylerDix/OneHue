@@ -537,11 +537,12 @@ struct TodayView: View {
         let allFilled = Set(0..<store.document.elements.count)
         let canvasWidth: CGFloat = 1024
         let canvasHeight = canvasWidth / store.document.aspectRatio
-
-        let caption = shareCaption
+        let message = store.document.completionMessage
+        let title = store.currentArtwork.displayName
 
         let renderer = ImageRenderer(content:
-            VStack(spacing: 0) {
+            ZStack {
+                // Completed artwork
                 SVGCanvasRenderer(
                     document: store.document,
                     filledElements: allFilled,
@@ -556,12 +557,49 @@ struct TodayView: View {
                 )
                 .frame(width: canvasWidth, height: canvasHeight)
 
-                Text(caption)
-                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                // Dimmed overlay
+                Color.black.opacity(0.45)
+
+                // Quote card + branding
+                VStack(spacing: 20) {
+                    Spacer()
+
+                    // Quote card
+                    VStack(spacing: 12) {
+                        Text(CompletionOverlayView.preventOrphan(message))
+                            .font(.system(size: 22, weight: .regular, design: .serif))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
+                            .kerning(-0.2)
+
+                        Text("— \(title)")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 22)
+                    .frame(maxWidth: 400)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(.black.opacity(0.55))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                            )
+                    )
+
+                    Spacer()
+
+                    // App branding at bottom
+                    Text("One Hue")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .padding(.bottom, 20)
+                }
+                .padding(.horizontal, 24)
             }
+            .frame(width: canvasWidth, height: canvasHeight)
             .background(Color.black)
         )
         renderer.scale = 2.0

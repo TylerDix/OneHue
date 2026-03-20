@@ -1195,10 +1195,10 @@ struct SVGCanvasRenderer: View {
 
     // MARK: - Color Helpers (cached to avoid UIColor HSB conversion every frame)
 
-    private static var mutedCache: [UInt64: Color] = [:]
+    private static var mutedCache: [Int: Color] = [:]
 
-    private static func cacheKey(_ color: Color, mode: UInt8) -> UInt64 {
-        UInt64(color.hashValue) &+ UInt64(mode)
+    private static func cacheKey(_ color: Color, mode: UInt8) -> Int {
+        color.hashValue &+ Int(mode) &* 31
     }
 
     private static func computeMuted(_ color: Color, selected: Bool) -> Color {

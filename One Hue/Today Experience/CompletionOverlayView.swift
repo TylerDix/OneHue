@@ -349,7 +349,7 @@ struct CompletionOverlayView: View {
 
     /// Replaces the last space with a non-breaking space so the final
     /// two words always wrap together — no orphan words on the last line.
-    private static func preventOrphan(_ text: String) -> String {
+    static func preventOrphan(_ text: String) -> String {
         guard let range = text.range(of: " ", options: .backwards) else { return text }
         var result = text
         result.replaceSubrange(range, with: "\u{00A0}")
