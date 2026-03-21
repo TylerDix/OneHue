@@ -225,12 +225,21 @@ final class ColoringStore: ObservableObject {
         autoGrabbedCount += toFill.count - clusterCount
         tapCount += 1
 
-        // Sound + haptic fire BEFORE fill mutation for snappier feedback
-        lightHaptic.impactOccurred()
+        // Sound fires BEFORE fill mutation for snappier feedback
+        // Haptic reserved for group completion only (line ~258)
         if soundEnabled {
             fillPlayer?.currentTime = 0
-            // Subtle pitch variation per tap — keeps repetitive tapping from feeling monotonous
-            fillPlayer?.rate = Float.random(in: 0.92...1.08)
+            // Pitch mapped to color hue — warm colors (reds) lower, cool colors (blues) higher
+            // Plus small random jitter so repeated taps on same color still vary
+            let baseRate: Float = {
+                guard let group = selectedGroup else { return 1.0 }
+                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                UIColor(group.color).getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+                // Map hue 0→1 to rate 0.85→1.15 (reds low, cyans high, wraps back down for purples)
+                // Sin curve gives natural wrap: reds/magentas low, greens/cyans high
+                return 0.95 + 0.15 * Float(sin(h * .pi))
+            }()
+            fillPlayer?.rate = baseRate + Float.random(in: -0.03...0.03)
             fillPlayer?.play()
         }
 
@@ -572,6 +581,7 @@ final class ColoringStore: ObservableObject {
 
     // MARK: - Debug
 
+    #if DEBUG
     func debugForceComplete() {
         autoCompleteEnabled = false
         completionPending = false          // reset in case of prior attempt
@@ -600,6 +610,7 @@ final class ColoringStore: ObservableObject {
         filledElements = allIndices
         phase = .painting
     }
+    #endif
 
     // MARK: - Auto Complete
 
