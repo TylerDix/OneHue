@@ -55,6 +55,24 @@ struct SVGDocument: Identifiable {
     /// Element index → cluster index lookup
     let elementClusterMap: [Int: Int]
 
+    /// Cached SwiftUI Path objects — avoids CGPath→Path conversion every frame.
+    /// Built lazily on first access via the shared PathCache.
+    private let _pathCache = PathCache()
+
+    /// O(1) access to pre-built Path for element at index.
+    func cachedPath(at index: Int) -> Path { _pathCache.path(at: index, elements: elements) }
+
+    /// Reference-type cache so struct copies share the same backing store.
+    final class PathCache {
+        private var paths: [Path]?
+        func path(at index: Int, elements: [SVGElement]) -> Path {
+            if paths == nil {
+                paths = elements.map { Path($0.path) }
+            }
+            return paths![index]
+        }
+    }
+
     var aspectRatio: CGFloat {
         guard viewBox.height > 0 else { return 0.747 }
         return viewBox.width / viewBox.height

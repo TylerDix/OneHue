@@ -931,21 +931,29 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
+            // Build element→animation lookup once per frame (avoids O(n×m) scan)
+            var animByElement: [Int: FillAnimation] = [:]
+            for anim in activeAnimations {
+                for idx in anim.elementIndices {
+                    animByElement[idx] = anim
+                }
+            }
+
             // Pass 1: Fill all elements (with blob reveal for active animations)
             for element in document.elements {
                 let isFilled = isPeeking || filledElements.contains(element.id)
                 guard let groupIdx = document.elementGroupMap[element.id],
                       groupIdx < document.groups.count else {
                     // Ungrouped element (border sliver): render as white, no interaction
-                    let path = Path(element.path)
+                    let path = document.cachedPath(at: element.id)
                     ctx.fill(path, with: .color(.white))
                     continue
                 }
                 let group = document.groups[groupIdx]
-                let path = Path(element.path)
+                let path = document.cachedPath(at: element.id)
 
                 // Check if this element is part of an active blob animation
-                let anim = activeAnimations.first { $0.elementIndices.contains(element.id) }
+                let anim = animByElement[element.id]
 
                 if isFilled, let anim = anim {
                     // Animating: blob expanding from tap point
@@ -1006,8 +1014,7 @@ struct SVGCanvasRenderer: View {
                 let boundaryOpacity = 0.12 * strokeDissolve
                 for element in document.elements {
                     guard document.elementGroupMap[element.id] != nil else { continue }
-                    let path = Path(element.path)
-                    ctx.stroke(path, with: .color(.black.opacity(boundaryOpacity)), style: boundaryStyle)
+                    ctx.stroke(document.cachedPath(at: element.id), with: .color(.black.opacity(boundaryOpacity)), style: boundaryStyle)
                 }
             }
 
@@ -1019,10 +1026,9 @@ struct SVGCanvasRenderer: View {
                 for element in document.elements {
                     guard !filledElements.contains(element.id) else { continue }
                     guard document.elementGroupMap[element.id] != nil else { continue }
-                    let path = Path(element.path)
                     let isSelected = document.elementGroupMap[element.id] == selectedGroupIndex
                     let opacity = isSelected ? 0.22 : 0.14
-                    ctx.stroke(path, with: .color(.white.opacity(opacity)), style: hairlineStyle)
+                    ctx.stroke(document.cachedPath(at: element.id), with: .color(.white.opacity(opacity)), style: hairlineStyle)
                 }
             }
 
@@ -1034,7 +1040,7 @@ struct SVGCanvasRenderer: View {
                 // Build unfilled path once, reuse for both passes
                 var unfilledPath = Path()
                 for idx in selectedGroup.elementIndices where !filledElements.contains(idx) {
-                    unfilledPath.addPath(Path(document.elements[idx].path))
+                    unfilledPath.addPath(document.cachedPath(at: idx))
                 }
 
                 let light = Self.isLightColor(selectedGroup.color)
