@@ -73,11 +73,15 @@ struct GalleryView: View {
                                             artwork: item.artwork,
                                             index: item.index,
                                             isCurrent: item.index == store.currentArtworkIndex,
-                                            isToday: item.index == Artwork.today().index
-                                        ) {
-                                            store.loadArtwork(at: item.index)
-                                            dismiss()
-                                        }
+                                            isToday: item.index == Artwork.today().index,
+                                            onTap: {
+                                                store.loadArtwork(at: item.index)
+                                                dismiss()
+                                            },
+                                            onReset: item.index == store.currentArtworkIndex ? {
+                                                store.resetProgress()
+                                            } : nil
+                                        )
                                     }
                                 }
                                 .padding(.horizontal, 16)
@@ -208,6 +212,7 @@ struct GalleryCell: View {
     let isCurrent: Bool
     var isToday: Bool = false
     let onTap: () -> Void
+    var onReset: (() -> Void)?
 
     @State private var document: SVGDocument?
     @State private var appeared = false
@@ -340,6 +345,7 @@ struct GalleryCell: View {
             Button("Cancel", role: .cancel) { }
             Button("Start Over", role: .destructive) {
                 ColoringStore.resetArtwork(artwork.id)
+                onReset?()
                 // Reload document to refresh thumbnail
                 document = nil
                 Task {
