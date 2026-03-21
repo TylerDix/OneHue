@@ -303,14 +303,14 @@ struct AboutView: View {
                     Text("One Hue")
                         .font(.system(size: 32, weight: .light, design: .serif))
                         .foregroundStyle(.white.opacity(0.9))
-                    Text("One artwork. One color at a time.")
+                    Text("The whole world colors the same page.")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
                 VStack(spacing: 16) {
-                    aboutParagraph("A new image appears each day. You fill it in, one hue at a\u{00A0}time. That\u{00A0}is\u{00A0}the\u{00A0}whole\u{00A0}game.")
-                    aboutParagraph("No ads. No accounts. No streaks. No algorithm deciding what you deserve. Just color, quiet, and the occasional\u{00A0}sarcastic\u{00A0}remark.")
+                    aboutParagraph("A new artwork appears each day — the same one for everyone. Pick a color, tap the numbered regions, and watch it come\u{00A0}alive.")
+                    aboutParagraph("No ads. No accounts. No in-app purchases blocking content. Just color, quiet, and the occasional\u{00A0}sarcastic\u{00A0}remark.")
                     aboutParagraph("Made by one person who wanted something calm to do with\u{00A0}his\u{00A0}hands.")
                 }
                 .padding(.horizontal, 28)
