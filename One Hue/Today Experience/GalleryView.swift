@@ -211,9 +211,15 @@ struct GalleryCell: View {
 
     @State private var document: SVGDocument?
     @State private var appeared = false
+    @State private var showResetConfirm = false
 
     private var isCompleted: Bool {
         ColoringStore.isArtworkCompleted(artwork.id)
+    }
+
+    /// Whether the artwork has any saved progress (filled or completed).
+    private var hasProgress: Bool {
+        isCompleted || !(UserDefaults.standard.array(forKey: "onehue.svg.\(artwork.id)") as? [Int] ?? []).isEmpty
     }
 
     /// Load saved fill progress for in-progress artworks
@@ -321,6 +327,30 @@ struct GalleryCell: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(artwork.displayName), \(dateStamp)\(isCompleted ? ", completed" : "")\(isCurrent ? ", current" : "")\(savedRating != nil ? ", liked" : "")")
+        .contextMenu {
+            if hasProgress {
+                Button(role: .destructive) {
+                    showResetConfirm = true
+                } label: {
+                    Label("Start Over", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
+        .alert("Start Over?", isPresented: $showResetConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Start Over", role: .destructive) {
+                ColoringStore.resetArtwork(artwork.id)
+                // Reload document to refresh thumbnail
+                document = nil
+                Task {
+                    document = await Task.detached(priority: .userInitiated) {
+                        SVGDocumentCache.shared.document(for: artwork)
+                    }.value
+                }
+            }
+        } message: {
+            Text("This will erase all progress on \"\(artwork.displayName)\".")
+        }
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 12)
         .animation(.easeOut(duration: 0.3), value: appeared)

@@ -99,6 +99,7 @@ struct CanvasView: View {
             .offset(offset)
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
+            .overlay { edgeGlowOverlay }
             .contentShape(Rectangle())
             .gesture(paintGesture(viewportSize: geo.size, renderSize: renderSize))
             .simultaneousGesture(zoomGesture)
@@ -622,6 +623,67 @@ struct CanvasView: View {
             return CGSize(width: available.width, height: hByWidth)
         }
         return CGSize(width: wByHeight, height: available.height)
+    }
+
+    // MARK: - Edge Glow (off-screen content hint)
+
+    /// Subtle gradient on viewport edges where more content is available.
+    /// Tells the user the artwork extends beyond the visible area.
+    @ViewBuilder
+    private var edgeGlowOverlay: some View {
+        if contentOverflows, store.phase == .painting, !store.isPeeking {
+            let maxX = max(0, (currentRenderSize.width * currentZoom - viewportSize.width) / 2)
+            let maxY = max(0, (currentRenderSize.height * currentZoom - viewportSize.height) / 2)
+            // How far from edge in each direction (0 = at edge, 1 = centered)
+            let leftRoom  = maxX > 1 ? (offset.width + maxX) / (2 * maxX) : 0.5
+            let rightRoom = maxX > 1 ? (maxX - offset.width) / (2 * maxX) : 0.5
+            let topRoom   = maxY > 1 ? (offset.height + maxY) / (2 * maxY) : 0.5
+            let botRoom   = maxY > 1 ? (maxY - offset.height) / (2 * maxY) : 0.5
+
+            let glowSize: CGFloat = 12
+            let baseOpacity: Double = 0.10
+
+            ZStack {
+                // Left edge
+                if leftRoom > 0.02 {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.white.opacity(baseOpacity * min(leftRoom * 4, 1)), .clear],
+                                       startPoint: .leading, endPoint: .trailing)
+                            .frame(width: glowSize)
+                        Spacer()
+                    }
+                }
+                // Right edge
+                if rightRoom > 0.02 {
+                    HStack(spacing: 0) {
+                        Spacer()
+                        LinearGradient(colors: [.clear, .white.opacity(baseOpacity * min(rightRoom * 4, 1))],
+                                       startPoint: .leading, endPoint: .trailing)
+                            .frame(width: glowSize)
+                    }
+                }
+                // Top edge
+                if topRoom > 0.02 {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.white.opacity(baseOpacity * min(topRoom * 4, 1)), .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: glowSize)
+                        Spacer()
+                    }
+                }
+                // Bottom edge
+                if botRoom > 0.02 {
+                    VStack(spacing: 0) {
+                        Spacer()
+                        LinearGradient(colors: [.clear, .white.opacity(baseOpacity * min(botRoom * 4, 1))],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: glowSize)
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .animation(.easeOut(duration: 0.2), value: contentOverflows)
+        }
     }
 
     /// Clamp offset values without animation — call inside withAnimation blocks.

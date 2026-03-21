@@ -471,6 +471,13 @@ final class ColoringStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "onehue.completed.\(currentArtwork.id)")
     }
 
+    /// Reset an artwork's progress by ID without loading it into the store.
+    /// Used by gallery context menu for "Start Over".
+    static func resetArtwork(_ artworkID: String) {
+        clearProgress(for: artworkID)
+        UserDefaults.standard.removeObject(forKey: "onehue.completed.\(artworkID)")
+    }
+
     /// Incremented to tell CanvasView to slowly drift back to center.
     @Published private(set) var completionDriftToken: UInt = 0
 
