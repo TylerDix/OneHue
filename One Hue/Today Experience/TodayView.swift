@@ -351,9 +351,18 @@ struct TodayView: View {
                 }
 
                 if isOnTodayArtwork {
-                    Text(todayDateString)
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.35))
+                    HStack(spacing: 6) {
+                        Text(todayDateString)
+                            .font(.system(size: 12, weight: .regular, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.35))
+
+                        let streak = ColoringStore.currentStreak
+                        if streak >= 2 {
+                            Text("Day \(streak)")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                    }
                 }
             }
 
@@ -393,6 +402,24 @@ struct TodayView: View {
 //                }
 //                .transition(.opacity)
 //            }
+
+            // Progress ring — percentage complete
+            if store.phase == .painting && store.filledElements.count > 0 {
+                let pct = store.progressFraction
+                ZStack {
+                    Circle()
+                        .stroke(.white.opacity(0.1), lineWidth: 2.5)
+                    Circle()
+                        .trim(from: 0, to: pct)
+                        .stroke(.white.opacity(0.5), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int(pct * 100))%")
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .frame(width: 32, height: 32)
+                .transition(.opacity)
+            }
 
             Button { coloringActive = false } label: {
                 Image(systemName: "square.grid.2x2")

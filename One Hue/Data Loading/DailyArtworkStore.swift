@@ -60,6 +60,7 @@ final class ColoringStore: ObservableObject {
         guard let url = Bundle.main.url(forResource: "bloop", withExtension: "m4a") else { return nil }
         let player = try? AVAudioPlayer(contentsOf: url)
         player?.volume = 0.15
+        player?.enableRate = true
         player?.prepareToPlay()
         return player
     }()
@@ -164,7 +165,9 @@ final class ColoringStore: ObservableObject {
         document = doc
         spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         filledElements = Self.loadProgress(for: doc.id)
-        selectedGroupIndex = filledElements.isEmpty ? nil : Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
+        // Auto-select largest incomplete group — even on fresh artworks so the user
+        // can start tapping immediately without choosing a color first.
+        selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
         phase = (filledElements.count >= doc.totalElements && doc.totalElements > 0) ? .complete : .painting
     }
 
@@ -226,6 +229,8 @@ final class ColoringStore: ObservableObject {
         lightHaptic.impactOccurred()
         if soundEnabled {
             fillPlayer?.currentTime = 0
+            // Subtle pitch variation per tap — keeps repetitive tapping from feeling monotonous
+            fillPlayer?.rate = Float.random(in: 0.92...1.08)
             fillPlayer?.play()
         }
 
@@ -560,6 +565,7 @@ final class ColoringStore: ObservableObject {
             withAnimation(.easeOut(duration: 0.6)) { self.phase = .complete }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             UserDefaults.standard.set(true, forKey: "onehue.completed.\(self.currentArtwork.id)")
+            self.recordCompletionDay()
             Task { await CompletionService.shared.reportCompletion(artworkID: self.currentArtwork.id) }
         }
     }
@@ -664,6 +670,44 @@ final class ColoringStore: ObservableObject {
     /// Checks if an artwork has been completed (proper flag, not heuristic).
     static func isArtworkCompleted(_ artworkID: String) -> Bool {
         UserDefaults.standard.bool(forKey: "onehue.completed.\(artworkID)")
+    }
+
+    // MARK: - Streak
+
+    /// Records today as a day with a completion and returns current streak length.
+    func recordCompletionDay() {
+        var dates = UserDefaults.standard.array(forKey: "onehue.completionDates") as? [String] ?? []
+        let today = Self.utcDateString()
+        if !dates.contains(today) {
+            dates.append(today)
+            UserDefaults.standard.set(dates, forKey: "onehue.completionDates")
+        }
+    }
+
+    /// Current streak — consecutive days ending today (or yesterday if today is still in progress).
+    static var currentStreak: Int {
+        let dates = Set(UserDefaults.standard.array(forKey: "onehue.completionDates") as? [String] ?? [])
+        guard !dates.isEmpty else { return 0 }
+        let cal = Calendar(identifier: .gregorian)
+        var day = cal.startOfDay(for: Date())
+        // Allow today or yesterday as the streak anchor
+        let todayStr = utcDateString(for: day)
+        if !dates.contains(todayStr) {
+            day = cal.date(byAdding: .day, value: -1, to: day) ?? day
+        }
+        var streak = 0
+        while dates.contains(utcDateString(for: day)) {
+            streak += 1
+            day = cal.date(byAdding: .day, value: -1, to: day) ?? day
+        }
+        return streak
+    }
+
+    private static func utcDateString(for date: Date? = nil) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        return fmt.string(from: date ?? Date())
     }
 
     private static func loadProgress(for docID: String) -> Set<Int> {

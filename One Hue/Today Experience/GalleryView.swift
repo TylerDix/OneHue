@@ -216,6 +216,13 @@ struct GalleryCell: View {
         ColoringStore.isArtworkCompleted(artwork.id)
     }
 
+    /// Load saved fill progress for in-progress artworks
+    private func savedProgress(for doc: SVGDocument) -> Set<Int> {
+        if isCompleted { return Set(0..<doc.totalElements) }
+        let array = UserDefaults.standard.array(forKey: "onehue.svg.\(doc.id)") as? [Int] ?? []
+        return Set(array)
+    }
+
     private var savedRating: Int? {
         let val = UserDefaults.standard.integer(forKey: "onehue.rated.\(artwork.id)")
         return val > 0 ? val : nil
@@ -238,7 +245,7 @@ struct GalleryCell: View {
                         if let doc = document {
                             SVGCanvasRenderer(
                                 document: doc,
-                                filledElements: isCompleted ? Set(0..<doc.totalElements) : [],
+                                filledElements: savedProgress(for: doc),
                                 selectedGroupIndex: nil,
                                 showNumbers: false,
                                 isPeeking: false,
