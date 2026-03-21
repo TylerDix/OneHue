@@ -416,10 +416,7 @@ struct TodayView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
             #if DEBUG
-            // ── Single entry point for all debug tools ──
-            // Double-tap the gear icon to open TesterPanel.
-            // All debug features consolidated here: navigation, artwork info,
-            // canvas metrics, actions (reset/fill/nearly-complete), toggles.
+            // Double-tap gear to open tester panel
             .onTapGesture(count: 2) {
                 showTesterPanel = true
             }
