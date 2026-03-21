@@ -30,12 +30,12 @@ struct TodayView: View {
     @State private var showReveal = false
     @State private var lastTapNormalized: CGPoint? = nil
 
+    #if DEBUG
     // Debug overlay — toggled via long-press on title
     @State private var showDebugOverlay = false
-
-    #if DEBUG
-    @State private var showTesterPanel = false
     #endif
+
+    // TesterPanel removed — debug tools consolidated into Settings (5-tap tagline)
 
     var body: some View {
         ZStack {
@@ -109,6 +109,7 @@ struct TodayView: View {
                     .overlay(alignment: .bottomLeading) {
                         if store.phase == .painting {
                             VStack(alignment: .leading, spacing: 8) {
+                                #if DEBUG
                                 // Debug overlay
                                 if showDebugOverlay {
                                     VStack(alignment: .leading, spacing: 4) {
@@ -127,6 +128,7 @@ struct TodayView: View {
                                     }
                                     .transition(.opacity)
                                 }
+                                #endif
 
                                 // Zoom-to-fit button (disabled)
 //                                Button {
@@ -294,18 +296,7 @@ struct TodayView: View {
                 ShareSheet(items: [image, "One Hue — \(store.currentArtwork.displayName)"])
             }
         }
-        #if DEBUG
-        .sheet(isPresented: $showTesterPanel) {
-            TesterPanelView(store: store) {
-                // Preview completion callback
-                showReveal = false
-                DispatchQueue.main.async { showReveal = true }
-                skipReveal = true
-                withAnimation(.easeOut(duration: 0.5)) { showCompletion = true }
-            }
-            .presentationDetents([.medium, .large])
-        }
-        #endif
+        // TesterPanel sheet removed — debug tools now in Settings
     }
 
     // MARK: - Header
@@ -324,6 +315,7 @@ struct TodayView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .layoutPriority(-1)
+                        #if DEBUG
                         // DEBUG: 5-tap title to reset artwork, 3-tap to preview completion
                         .onTapGesture(count: 5) {
                             showCompletion = false
@@ -341,6 +333,7 @@ struct TodayView: View {
                         .onLongPressGesture {
                             withAnimation { showDebugOverlay.toggle() }
                         }
+                        #endif
 
                     if store.phase == .complete {
                         Image(systemName: "checkmark")
@@ -442,12 +435,6 @@ struct TodayView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
-            #if DEBUG
-            // Double-tap gear to open tester panel
-            .onTapGesture(count: 2) {
-                showTesterPanel = true
-            }
-            #endif
         }
         .padding(.horizontal, 18)
     }

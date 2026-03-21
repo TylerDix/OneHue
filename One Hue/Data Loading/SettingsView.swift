@@ -9,8 +9,11 @@ struct SettingsView: View {
     @AppStorage("onehue.dailyReminder") private var dailyReminderEnabled = false
     @AppStorage("onehue.soundEnabled") private var soundEnabled = true
     @State private var showAbout = false
+    #if DEBUG
     @State private var debugTapCount = 0
     @State private var showDebug = false
+    @State private var jumpText: String = ""
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -67,7 +70,7 @@ struct SettingsView: View {
                     }
                 }
 
-                // 4. Tagline (5-tap reveals debug)
+                // 4. Tagline
                 Section {
                     VStack(spacing: 6) {
                         Text("One Hue")
@@ -80,77 +83,165 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
+                    #if DEBUG
                     .onTapGesture {
                         debugTapCount += 1
                         if debugTapCount >= 5 {
                             withAnimation { showDebug = true }
                         }
                     }
+                    #endif
                 }
 
-                // Hidden debug (only after 5-tap)
+                #if DEBUG
+                // Hidden debug (only after 5-tap on tagline)
                 if showDebug {
-                    Section("Dev") {
-                        VStack(spacing: 10) {
-                            HStack {
-                                Button { store.previousArtwork() } label: {
-                                    Image(systemName: "chevron.left")
-                                        .frame(width: 32, height: 32)
-                                }
-                                .buttonStyle(.bordered)
-
-                                Text(store.document.title)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity)
-
-                                Button { store.nextArtwork() } label: {
-                                    Image(systemName: "chevron.right")
-                                        .frame(width: 32, height: 32)
-                                }
-                                .buttonStyle(.bordered)
-                            }
-
-                            Button("Nearly Complete (5 left)") {
-                                store.debugNearlyComplete()
-                                dismiss()
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-
-                            Button("Force Complete") {
-                                store.debugForceComplete()
-                                dismiss()
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-
-                            Button(role: .destructive) {
-                                store.resetProgress()
-                            } label: {
-                                Text("Reset Progress")
-                                    .frame(maxWidth: .infinity)
+                    // Navigation
+                    Section("Navigation") {
+                        HStack {
+                            Button { store.previousArtwork() } label: {
+                                Image(systemName: "chevron.left")
+                                    .fontWeight(.bold)
+                                    .frame(width: 44, height: 36)
                             }
                             .buttonStyle(.bordered)
 
-                            LabeledContent("Elements") {
-                                Text("\(store.filledElements.count) / \(store.document.totalElements)")
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
+                            Spacer()
+
+                            Text("\(store.currentArtworkIndex + 1) / \(Artwork.catalog.count)")
+                                .font(.system(.body, design: .monospaced))
+                                .fontWeight(.semibold)
+
+                            Spacer()
+
+                            Button { store.nextArtwork() } label: {
+                                Image(systemName: "chevron.right")
+                                    .fontWeight(.bold)
+                                    .frame(width: 44, height: 36)
                             }
-                            LabeledContent("Groups") {
-                                Text("\(store.document.groups.count)")
-                                    .foregroundStyle(.secondary)
-                            }
-                            LabeledContent("Phase") {
-                                Text(String(describing: store.phase))
-                                    .foregroundStyle(.secondary)
-                            }
+                            .buttonStyle(.bordered)
                         }
-                        .padding(.vertical, 4)
+
+                        HStack {
+                            TextField("Jump to #", text: $jumpText)
+                                .keyboardType(.numberPad)
+                                .font(.system(.body, design: .monospaced))
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 120)
+
+                            Button("Go") {
+                                if let num = Int(jumpText), num >= 1, num <= Artwork.catalog.count {
+                                    store.loadArtwork(at: num - 1)
+                                    jumpText = ""
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(Int(jumpText).map { $0 >= 1 && $0 <= Artwork.catalog.count } != true)
+
+                            Spacer()
+                        }
+                    }
+                    .transition(.opacity)
+
+                    // Artwork info
+                    Section("Artwork") {
+                        LabeledContent("ID") {
+                            Text(store.currentArtwork.id)
+                                .foregroundStyle(.secondary)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        LabeledContent("Name") {
+                            Text(store.currentArtwork.displayName)
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                        LabeledContent("Elements") {
+                            Text("\(store.filledElements.count) / \(store.document.totalElements)")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        LabeledContent("Groups") {
+                            Text("\(store.document.groups.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                        LabeledContent("Clusters") {
+                            Text("\(store.document.clusters.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                        LabeledContent("Phase") {
+                            Text(store.phase == .painting ? "🎨 painting" : "✅ complete")
+                                .foregroundStyle(.secondary)
+                        }
+                        let vb = store.document.viewBox
+                        LabeledContent("ViewBox") {
+                            Text(String(format: "%.0f×%.0f", vb.width, vb.height))
+                                .foregroundStyle(.secondary)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        LabeledContent("Aspect") {
+                            Text(String(format: "%.3f", store.document.aspectRatio) +
+                                (store.document.aspectRatio > 0.99 && store.document.aspectRatio < 1.01 ? " ■" : ""))
+                                .foregroundStyle(.secondary)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                    }
+                    .transition(.opacity)
+
+                    // Canvas debug
+                    Section("Canvas") {
+                        let d = store.canvasDebug
+                        LabeledContent("Viewport") {
+                            Text(String(format: "%.0f × %.0f", d.viewportSize.width, d.viewportSize.height))
+                                .foregroundStyle(.secondary)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        LabeledContent("Render") {
+                            Text(String(format: "%.0f × %.0f", d.renderSize.width, d.renderSize.height))
+                                .foregroundStyle(.secondary)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        LabeledContent("Zoom") {
+                            Text(String(format: "%.2f×", d.zoom))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                    .transition(.opacity)
+
+                    // Actions
+                    Section("Actions") {
+                        Button("Nearly Complete (5 left)") {
+                            store.debugNearlyComplete()
+                            dismiss()
+                        }
+                        .tint(.orange)
+
+                        Button("Fill All (instant complete)") {
+                            store.fillAll()
+                            dismiss()
+                        }
+                        .tint(.green)
+
+                        Button("Force Complete") {
+                            store.debugForceComplete()
+                            dismiss()
+                        }
+                        .tint(.blue)
+
+                        Button(role: .destructive) {
+                            store.resetProgress()
+                        } label: {
+                            Text("Reset Progress")
+                        }
+
+                        Toggle("Tiny Grab", isOn: Binding(
+                            get: { !store.debugDisableTinyGrab },
+                            set: { store.debugDisableTinyGrab = !$0 }
+                        ))
                     }
                     .transition(.opacity)
                 }
+                #endif
 
             }
             .scrollContentBackground(.hidden)
