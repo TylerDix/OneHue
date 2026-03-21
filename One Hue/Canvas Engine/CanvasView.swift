@@ -531,8 +531,8 @@ struct CanvasView: View {
                 }
                 lastZoomTime = now
 
-                // Interpolated zoom — gives the buttery smooth feel
-                withAnimation(.interactiveSpring(response: 0.08, dampingFraction: 0.7)) {
+                // Interpolated zoom — slight lag before visual response for deliberate feel
+                withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.75)) {
                     if currentZoom > 0.01 {
                         let scale = newZoom / currentZoom
                         offset = CGSize(
@@ -570,7 +570,7 @@ struct CanvasView: View {
 
                 // Brief delay before re-enabling fills to prevent accidental
                 // fill from finger lift at the end of a pinch
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     isZooming = false
                 }
             }
@@ -1079,9 +1079,9 @@ struct SVGCanvasRenderer: View {
                 }
 
                 var candidateClusters: [ElementCluster] = []
-                if selectedGroupIndex != nil {
+                if let selIdx = selectedGroupIndex {
                     for cluster in document.clusters {
-                        guard cluster.groupIndex == selectedGroupIndex! else { continue }
+                        guard cluster.groupIndex == selIdx else { continue }
                         let hasUnfilled = cluster.elementIndices.contains { !filledElements.contains($0) }
                         guard hasUnfilled else { continue }
                         candidateClusters.append(cluster)
@@ -1232,7 +1232,8 @@ struct SVGCanvasRenderer: View {
         return result
     }
 
-    /// Warmer muted color for the "no color selected" overview state.
+    /// Muted color for the "no color selected" overview state.
+    /// Kept dim so the artwork emerges through coloring, not previewed upfront.
     private static func computeMutedOverview(_ color: Color) -> Color {
         let key = cacheKey(color, mode: 2)
         if let cached = mutedCache[key] { return cached }
@@ -1242,8 +1243,8 @@ struct SVGCanvasRenderer: View {
         uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
         let baseBrightness = max(b, 0.35)
         let result = Color(hue: Double(h),
-                     saturation: Double(s * 0.12),
-                     brightness: Double(baseBrightness * 0.23))
+                     saturation: Double(s * 0.10),
+                     brightness: Double(baseBrightness * 0.22))
         mutedCache[key] = result
         return result
     }
