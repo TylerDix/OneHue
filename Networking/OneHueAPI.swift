@@ -27,7 +27,9 @@ enum OneHueAPI {
             let rows = try JSONDecoder().decode([CounterRow].self, from: data)
             return rows.first?.count ?? 0
         } catch {
+            #if DEBUG
             print("[OneHueAPI] fetchCount error: \(error.localizedDescription)")
+            #endif
             return 0
         }
     }
@@ -55,7 +57,9 @@ enum OneHueAPI {
             }
             return 0
         } catch {
+            #if DEBUG
             print("[OneHueAPI] incrementCount error: \(error.localizedDescription)")
+            #endif
             return 0
         }
     }
@@ -77,7 +81,9 @@ enum OneHueAPI {
             let rows = try JSONDecoder().decode([DailyImageDTO].self, from: data)
             return rows.first
         } catch {
+            #if DEBUG
             print("[OneHueAPI] fetchDailyImage error: \(error.localizedDescription)")
+            #endif
             return nil
         }
     }

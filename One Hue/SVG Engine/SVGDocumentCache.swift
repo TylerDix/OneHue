@@ -1,17 +1,40 @@
 import Foundation
+import UIKit
 
-/// Thread-safe cache for parsed SVG documents.
+/// Thread-safe LRU cache for parsed SVG documents.
 /// Prevents redundant re-parsing when gallery cells scroll in/out.
+/// Caps at `maxEntries` to avoid unbounded memory growth.
 final class SVGDocumentCache: @unchecked Sendable {
     static let shared = SVGDocumentCache()
 
     private var cache: [String: SVGDocument] = [:]
+    /// Access order for LRU eviction (most recent at end).
+    private var accessOrder: [String] = []
     private let lock = NSLock()
+
+    /// Maximum cached documents. ~20 docs keeps memory under ~100 MB.
+    private let maxEntries = 20
+
+    private var memoryObserver: NSObjectProtocol?
+
+    private init() {
+        memoryObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil, queue: nil
+        ) { [weak self] _ in
+            self?.evictAll()
+        }
+    }
 
     /// Returns a cached document or parses + caches it.
     func document(for artwork: Artwork) -> SVGDocument? {
         lock.lock()
         if let cached = cache[artwork.id] {
+            // Move to end of access order (most recently used)
+            if let idx = accessOrder.firstIndex(of: artwork.id) {
+                accessOrder.remove(at: idx)
+            }
+            accessOrder.append(artwork.id)
             lock.unlock()
             return cached
         }
@@ -22,6 +45,12 @@ final class SVGDocumentCache: @unchecked Sendable {
 
         lock.lock()
         cache[artwork.id] = doc
+        accessOrder.append(artwork.id)
+        // Evict oldest entries if over limit
+        while cache.count > maxEntries, let oldest = accessOrder.first {
+            accessOrder.removeFirst()
+            cache.removeValue(forKey: oldest)
+        }
         lock.unlock()
         return doc
     }
@@ -50,5 +79,13 @@ final class SVGDocumentCache: @unchecked Sendable {
         let doc = cache[artwork.id]
         lock.unlock()
         return doc
+    }
+
+    /// Drop all cached documents (called on memory warning).
+    private func evictAll() {
+        lock.lock()
+        cache.removeAll()
+        accessOrder.removeAll()
+        lock.unlock()
     }
 }

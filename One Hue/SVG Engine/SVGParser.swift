@@ -298,10 +298,10 @@ final class SVGParser: NSObject, XMLParserDelegate {
 
             func find(_ x: Int) -> Int {
                 var root = x
-                while parent[root]! != root { root = parent[root]! }
+                while let p = parent[root], p != root { root = p }
                 var curr = x
                 while curr != root {
-                    let next = parent[curr]!
+                    guard let next = parent[curr] else { break }
                     parent[curr] = root
                     curr = next
                 }
@@ -568,9 +568,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
         // Build merged groups, keeping the color of the component with most elements
         var merged: [SVGColorGroup] = []
         var newId = 0
-        for (_, memberIndices) in components.sorted(by: { $0.value.first! < $1.value.first! }) {
-            // Pick representative: the group with the most elements
-            let rep = memberIndices.max(by: { groups[$0].elementIndices.count < groups[$1].elementIndices.count })!
+        for (_, memberIndices) in components.sorted(by: { ($0.value.first ?? 0) < ($1.value.first ?? 0) }) {
+            guard let rep = memberIndices.max(by: { groups[$0].elementIndices.count < groups[$1].elementIndices.count }) else { continue }
 
             // Combine all element indices
             var allIndices: [Int] = []

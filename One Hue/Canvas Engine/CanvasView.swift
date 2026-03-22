@@ -1119,8 +1119,15 @@ struct SVGCanvasRenderer: View {
                         : cluster.groupIndex + 1
 
                     let dim = min(cluster.bounds.width, cluster.bounds.height)
-                    let naturalSize = min(dim * 0.35, showAllGroups ? 48 : 60)
-                    let fontSize = max(naturalSize, CGFloat(showAllGroups ? 20 : 24))
+                    let naturalSize: CGFloat
+                    let fontSize: CGFloat
+                    if isLargeScreen {
+                        naturalSize = min(dim * 0.25, showAllGroups ? 36 : 44)
+                        fontSize = max(naturalSize, CGFloat(showAllGroups ? 16 : 18))
+                    } else {
+                        naturalSize = min(dim * 0.35, showAllGroups ? 48 : 60)
+                        fontSize = max(naturalSize, CGFloat(showAllGroups ? 20 : 24))
+                    }
                     let needsPill = naturalSize < 24
 
                     // Numbers require zoom to appear — search by color first,
@@ -1177,11 +1184,11 @@ struct SVGCanvasRenderer: View {
                     let textOpacity: Double
                     if label.isOverview {
                         pillOpacity = (label.needsPill ? 0.25 : 0.18) * label.alpha
-                        textWeight = .medium
+                        textWeight = isLargeScreen ? .regular : .medium
                         textOpacity = 0.5 * label.alpha
                     } else {
                         pillOpacity = (label.needsPill ? 0.65 : 0.5) * label.alpha
-                        textWeight = .semibold
+                        textWeight = isLargeScreen ? .medium : .semibold
                         textOpacity = label.alpha
                     }
                     let pillW = label.fontSize * 1.1
