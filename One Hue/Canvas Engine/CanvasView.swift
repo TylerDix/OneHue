@@ -506,21 +506,30 @@ struct CanvasView: View {
     }
 
     private var zoomGesture: some Gesture {
-        MagnificationGesture()
+        MagnifyGesture()
             .onChanged { value in
                 if !isZooming {
                     isZooming = true
                 }
                 // Allow slight overshoot past limits (gentle resistance), clamped to soft limits
-                let rawZoom = lastZoom * value
+                let rawZoom = lastZoom * value.magnification
                 let newZoom = min(max(rawZoom, softMinZoom), softMaxZoom)
 
-                // Direct tracking — no spring lag during active pinch
+                // Zoom toward the pinch midpoint, not the center.
+                // startLocation is in the outer frame's coordinate space.
+                // The anchor is the pinch point relative to the view center.
+                let anchor = CGPoint(
+                    x: value.startLocation.x - viewportSize.width / 2,
+                    y: value.startLocation.y - viewportSize.height / 2
+                )
+
                 if currentZoom > 0.01 {
                     let scale = newZoom / currentZoom
+                    // Adjust offset so the point under the pinch stays fixed:
+                    // newOffset = anchor + (oldOffset - anchor) * scale
                     offset = CGSize(
-                        width:  offset.width  * scale,
-                        height: offset.height * scale
+                        width:  anchor.x + (offset.width  - anchor.x) * scale,
+                        height: anchor.y + (offset.height - anchor.y) * scale
                     )
                 }
                 currentZoom = newZoom

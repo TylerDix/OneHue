@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Region Tester</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; color: #fff; font-family: -apple-system, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+
+  #sidebar {
+    width: 280px; min-width: 280px; background: #1a1a1a; border-right: 1px solid #333;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #sidebar h2 { padding: 12px 16px 8px; font-size: 14px; color: #888; }
+  #file-input-area { padding: 8px 16px; }
+  #file-input-area input { font-size: 12px; color: #ccc; }
+  #palette { padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .color-swatch {
+    width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+    border: 2px solid transparent; position: relative; transition: all 0.15s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
+  .color-swatch .count {
+    position: absolute; bottom: -4px; right: -4px; background: #000; color: #fff;
+    font-size: 9px; padding: 1px 4px; border-radius: 8px; line-height: 1.2;
+  }
+
+  #region-list {
+    flex: 1; overflow-y: auto; padding: 8px 0;
+    border-top: 1px solid #333; margin-top: 8px;
+  }
+  .region-item {
+    padding: 6px 16px; font-size: 12px; cursor: pointer; display: flex;
+    justify-content: space-between; align-items: center;
+  }
+  .region-item:hover { background: #2a2a2a; }
+  .region-item.highlighted { background: #333; color: #fff; }
+  .region-item .area { color: #666; font-size: 10px; }
+
+  #stats {
+    padding: 12px 16px; border-top: 1px solid #333; font-size: 11px; color: #888;
+  }
+
+  #canvas-area {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+  }
+  #svg-container {
+    position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    overflow: auto;
+  }
+  #svg-container svg { display: block; min-height: 100vh; width: auto; max-width: none; }
+
+  /* Number labels */
+  .region-label {
+    position: absolute; pointer-events: none;
+    font-size: 11px; font-weight: 600; color: #fff;
+    text-shadow: 0 0 3px #000, 0 0 6px #000;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+  }
+
+  #controls {
+    position: absolute; top: 12px; right: 12px; display: flex; gap: 8px;
+  }
+  #controls button {
+    background: #333; color: #fff; border: 1px solid #555; padding: 6px 14px;
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+  }
+  #controls button:hover { background: #555; }
+  #controls button.active { background: #4a7; border-color: #4a7; }
+
+  #tooltip {
+    position: fixed; background: #000; color: #fff; padding: 6px 10px;
+    border-radius: 4px; font-size: 11px; pointer-events: none;
+    display: none; z-index: 100; max-width: 250px;
+    border: 1px solid #444;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h2>Region Tester</h2>
+  <div id="file-input-area">
+    <input type="file" id="file-input" accept=".svg">
+  </div>
+  <div id="palette"></div>
+  <div id="stats"></div>
+  <div id="region-list"></div>
+</div>
+
+<div id="canvas-area">
+  <div id="svg-container"></div>
+  <div id="controls">
+    <button id="btn-numbers" class="active" onclick="toggleNumbers()">Numbers</button>
+    <button id="btn-outlines" onclick="toggleOutlines()">Outlines</button>
+    <button id="btn-dimmed" onclick="toggleDimmed()">Dim Others</button>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+let svgDoc = null;
+let paths = [];       // { el, cls, color, area, cx, cy, index }
+let colorMap = {};    // cls -> { color, count, paths[] }
+let selectedColor = null;
+let highlightedPath = null;
+let showNumbers = true;
+let showOutlines = false;
+let dimOthers = false;
+
+// Load SVG from file input
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => loadSVG(ev.target.result);
+  reader.readAsText(file);
+});
+
+// Also try to load owlFull.svg by default
+fetch('../One Hue/Artworks/owlFull.svg')
+  .then(r => r.ok ? r.text() : Promise.reject())
+  .then(loadSVG)
+  .catch(() => {});
+
+function loadSVG(svgText) {
+  const container = document.getElementById('svg-container');
+  container.innerHTML = svgText;
+  svgDoc = container.querySelector('svg');
+  if (!svgDoc) return;
+
+  // Make SVG responsive
+  svgDoc.removeAttribute('width');
+  svgDoc.removeAttribute('height');
+  svgDoc.style.width = '100%';
+  svgDoc.style.height = 'auto';
+
+  parsePaths();
+  buildPalette();
+  buildRegionList();
+  addNumbers();
+  attachInteraction();
+  updateStats();
+}
+
+function parsePaths() {
+  paths = [];
+  colorMap = {};
+
+  const allPaths = svgDoc.querySelectorAll('path');
+  const styles = {};
+
+  // Parse CSS classes from <style>
+  const styleEl = svgDoc.querySelector('style');
+  if (styleEl) {
+    const css = styleEl.textContent;
+    const re = /\.(cls-\d+)\s*\{[^}]*fill:\s*(#[0-9a-fA-F]+)/g;
+    let m;
+    while ((m = re.exec(css)) !== null) {
+      styles[m[1]] = m[2];
+    }
+  }
+
+  allPaths.forEach((el, i) => {
+    const cls = el.getAttribute('class') || '';
+    const inlineColor = el.style.fill || el.getAttribute('fill');
+    const color = inlineColor || styles[cls] || '#000';
+
+    // Get bounding box for area and center
+    let area = 0, cx = 0, cy = 0;
+    try {
+      const bbox = el.getBBox();
+      area = bbox.width * bbox.height;
+      cx = bbox.x + bbox.width / 2;
+      cy = bbox.y + bbox.height / 2;
+    } catch(e) {}
+
+    const pathData = { el, cls, color: color.toLowerCase(), area, cx, cy, index: i };
+    paths.push(pathData);
+
+    if (!colorMap[color.toLowerCase()]) {
+      colorMap[color.toLowerCase()] = { color: color.toLowerCase(), cls, count: 0, paths: [] };
+    }
+    colorMap[color.toLowerCase()].count++;
+    colorMap[color.toLowerCase()].paths.push(pathData);
+
+    // Store original color
+    el.dataset.origColor = color;
+    el.dataset.pathIndex = i;
+  });
+}
+
+function buildPalette() {
+  const palette = document.getElementById('palette');
+  palette.innerHTML = '';
+
+  // Sort colors by count descending
+  const colors = Object.values(colorMap).sort((a, b) => b.count - a.count);
+
+  colors.forEach(({ color, count, cls }) => {
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch';
+    swatch.style.background = color;
+    swatch.innerHTML = `<span class="count">${count}</span>`;
+    swatch.title = `${cls}: ${color} (${count} paths)`;
+    swatch.onclick = () => selectColor(color, swatch);
+
+    // Dark colors need a subtle border to be visible
+    const rgb = hexToRgb(color);
+    if (rgb && (rgb.r + rgb.g + rgb.b) < 100) {
+      swatch.style.border = '2px solid #444';
+    }
+
+    palette.appendChild(swatch);
+  });
+}
+
+function buildRegionList() {
+  const list = document.getElementById('region-list');
+  list.innerHTML = '';
+
+  const displayPaths = selectedColor
+    ? paths.filter(p => p.color === selectedColor)
+    : paths;
+
+  // Sort by area descending (biggest regions first)
+  const sorted = [...displayPaths].sort((a, b) => b.area - a.area);
+
+  sorted.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'region-item';
+    item.innerHTML = `
+      <span>Path ${p.index} <span style="color:${p.color}">■</span> ${p.cls}</span>
+      <span class="area">${Math.round(p.area).toLocaleString()} sq</span>
+    `;
+    item.onmouseenter = () => highlightPath(p);
+    item.onmouseleave = () => unhighlightPath(p);
+    item.onclick = () => flashPath(p);
+    list.appendChild(item);
+  });
+}
+
+function addNumbers() {
+  // Remove old labels
+  document.querySelectorAll('.region-label').forEach(l => l.remove());
+  if (!showNumbers) return;
+
+  const container = document.getElementById('svg-container');
+  const svgRect = svgDoc.getBoundingClientRect();
+  const vb = svgDoc.viewBox.baseVal;
+
+  const displayPaths = selectedColor
+    ? paths.filter(p => p.color === selectedColor)
+    : paths;
+
+  // Group by color, number within each color group
+  const byColor = {};
+  displayPaths.forEach(p => {
+    if (!byColor[p.color]) byColor[p.color] = [];
+    byColor[p.color].push(p);
+  });
+
+  Object.values(byColor).forEach(group => {
+    // Sort by area descending so big regions get low numbers
+    group.sort((a, b) => b.area - a.area);
+  });
+
+  // For each color group, assign palette number
+  const colorKeys = Object.keys(colorMap);
+
+  displayPaths.forEach(p => {
+    const paletteIndex = colorKeys.indexOf(p.color) + 1;
+    if (p.area < 200) return; // skip tiny paths
+
+    // Convert SVG coords to screen coords
+    const scaleX = svgRect.width / vb.width;
+    const scaleY = svgRect.height / vb.height;
+    const screenX = p.cx * scaleX;
+    const screenY = p.cy * scaleY;
+
+    const label = document.createElement('div');
+    label.className = 'region-label';
+    label.textContent = paletteIndex;
+    label.style.left = screenX + 'px';
+    label.style.top = screenY + 'px';
+
+    // Scale label size with region area
+    const size = Math.max(9, Math.min(18, Math.sqrt(p.area) / 10));
+    label.style.fontSize = size + 'px';
+
+    container.appendChild(label);
+  });
+}
+
+function attachInteraction() {
+  paths.forEach(p => {
+    p.el.style.cursor = 'pointer';
+    p.el.style.transition = 'opacity 0.15s, stroke 0.15s';
+
+    p.el.addEventListener('mouseenter', () => {
+      highlightPath(p);
+      showTooltip(p);
+    });
+
+    p.el.addEventListener('mouseleave', () => {
+      unhighlightPath(p);
+      hideTooltip();
+    });
+
+    p.el.addEventListener('click', () => {
+      flashPath(p);
+    });
+  });
+}
+
+function selectColor(color, swatch) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+
+  if (selectedColor === color) {
+    selectedColor = null;
+    applyDimming();
+    buildRegionList();
+    addNumbers();
+    return;
+  }
+
+  selectedColor = color;
+  swatch.classList.add('active');
+  applyDimming();
+  buildRegionList();
+  addNumbers();
+}
+
+function applyDimming() {
+  if (!dimOthers && !selectedColor) {
+    paths.forEach(p => { p.el.style.opacity = '1'; });
+    return;
+  }
+
+  paths.forEach(p => {
+    if (selectedColor && p.color !== selectedColor) {
+      p.el.style.opacity = '0.15';
+    } else {
+      p.el.style.opacity = '1';
+    }
+  });
+}
+
+function highlightPath(p) {
+  highlightedPath = p;
+  p.el.style.stroke = '#fff';
+  p.el.style.strokeWidth = '2';
+
+  // Also highlight in sidebar
+  const items = document.querySelectorAll('.region-item');
+  items.forEach(item => {
+    if (item.textContent.includes(`Path ${p.index}`)) {
+      item.classList.add('highlighted');
+    }
+  });
+}
+
+function unhighlightPath(p) {
+  highlightedPath = null;
+  if (showOutlines) {
+    p.el.style.stroke = 'rgba(255,255,255,0.3)';
+    p.el.style.strokeWidth = '0.5';
+  } else {
+    p.el.style.stroke = 'none';
+    p.el.style.strokeWidth = '0';
+  }
+
+  document.querySelectorAll('.region-item').forEach(item => item.classList.remove('highlighted'));
+}
+
+function flashPath(p) {
+  const orig = p.el.style.fill || p.el.getAttribute('fill') || p.el.dataset.origColor;
+  p.el.style.fill = '#fff';
+  setTimeout(() => { p.el.style.fill = orig; }, 200);
+  setTimeout(() => { p.el.style.fill = '#fff'; }, 400);
+  setTimeout(() => { p.el.style.fill = orig; }, 600);
+}
+
+function showTooltip(p) {
+  const tooltip = document.getElementById('tooltip');
+  const sameColorPaths = colorMap[p.color]?.paths || [];
+  const rank = sameColorPaths.sort((a,b) => b.area - a.area).indexOf(p) + 1;
+
+  tooltip.innerHTML = `
+    <strong>Path ${p.index}</strong> — ${p.cls}<br>
+    Color: <span style="color:${p.color}">■</span> ${p.color}<br>
+    Area: ${Math.round(p.area).toLocaleString()} sq units<br>
+    ${rank} of ${sameColorPaths.length} regions in this color
+  `;
+  tooltip.style.display = 'block';
+
+  document.addEventListener('mousemove', moveTooltip);
+}
+
+function moveTooltip(e) {
+  const tooltip = document.getElementById('tooltip');
+  tooltip.style.left = (e.clientX + 12) + 'px';
+  tooltip.style.top = (e.clientY + 12) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+  document.removeEventListener('mousemove', moveTooltip);
+}
+
+function toggleNumbers() {
+  showNumbers = !showNumbers;
+  document.getElementById('btn-numbers').classList.toggle('active', showNumbers);
+  addNumbers();
+}
+
+function toggleOutlines() {
+  showOutlines = !showOutlines;
+  document.getElementById('btn-outlines').classList.toggle('active', showOutlines);
+  paths.forEach(p => {
+    if (showOutlines) {
+      p.el.style.stroke = 'rgba(255,255,255,0.3)';
+      p.el.style.strokeWidth = '0.5';
+    } else {
+      p.el.style.stroke = 'none';
+      p.el.style.strokeWidth = '0';
+    }
+  });
+}
+
+function toggleDimmed() {
+  dimOthers = !dimOthers;
+  document.getElementById('btn-dimmed').classList.toggle('active', dimOthers);
+  applyDimming();
+}
+
+function updateStats() {
+  const stats = document.getElementById('stats');
+  const areas = paths.map(p => p.area).sort((a,b) => b - a);
+  const bigPaths = paths.filter(p => p.area > 50000);
+  stats.innerHTML = `
+    <strong>${paths.length}</strong> total paths, <strong>${Object.keys(colorMap).length}</strong> colors<br>
+    Largest region: ${Math.round(areas[0]).toLocaleString()} sq<br>
+    Big regions (>50k): <strong>${bigPaths.length}</strong><br>
+    <span style="color:#f84;">These are your problem paths — too big to tap individually</span>
+  `;
+}
+
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) } : null;
+}
+</script>
+</body>
+</html>
