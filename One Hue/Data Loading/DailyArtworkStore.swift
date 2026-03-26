@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import UIKit
 import AVFoundation
 
 @MainActor
@@ -35,8 +34,6 @@ final class ColoringStore: ObservableObject {
 
     // MARK: - Haptics & Sound
 
-    private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
-    private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
 
     /// Cached sound-enabled flag — avoids UserDefaults disk reads on every tap
     /// Refreshed via UserDefaults.didChangeNotification when settings toggle fires.
@@ -55,8 +52,10 @@ final class ColoringStore: ObservableObject {
 
     private var fillPlayer: AVAudioPlayer? = {
         // .ambient + .mixWithOthers so SFX and background music coexist
+        #if canImport(UIKit)
         try? AVAudioSession.sharedInstance().setCategory(.ambient, options: .mixWithOthers)
         try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
         guard let url = Bundle.main.url(forResource: "bloop", withExtension: "m4a") else { return nil }
         let player = try? AVAudioPlayer(contentsOf: url)
         player?.volume = 0.15
@@ -76,7 +75,7 @@ final class ColoringStore: ObservableObject {
 
     /// Play the boop sound + light haptic — for UI button feedback
     func playBloop() {
-        lightHaptic.impactOccurred()
+        Haptics.lightImpact()
         if soundEnabled {
             fillPlayer?.currentTime = 0
             fillPlayer?.play()
@@ -233,11 +232,10 @@ final class ColoringStore: ObservableObject {
             // Plus small random jitter so repeated taps on same color still vary
             let baseRate: Float = {
                 guard let group = selectedGroup else { return 1.0 }
-                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                UIColor(group.color).getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+                let hsb = group.color.hsbComponents()
                 // Map hue 0→1 to rate 0.85→1.15 (reds low, cyans high, wraps back down for purples)
                 // Sin curve gives natural wrap: reds/magentas low, greens/cyans high
-                return 0.95 + 0.15 * Float(sin(h * .pi))
+                return 0.95 + 0.15 * Float(sin(hsb.hue * .pi))
             }()
             fillPlayer?.rate = baseRate + Float.random(in: -0.03...0.03)
             fillPlayer?.play()
@@ -255,7 +253,7 @@ final class ColoringStore: ObservableObject {
 
         // Celebrate group completion — user picks next color manually (like HC)
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
-            mediumHaptic.impactOccurred()
+            Haptics.mediumImpact()
             if soundEnabled {
                 dingPlayer?.currentTime = 0
                 dingPlayer?.play()
@@ -403,7 +401,7 @@ final class ColoringStore: ObservableObject {
     /// Scaled by artwork complexity so easy artworks don't auto-grab too many cells.
     /// iPad uses halved thresholds so more pieces remain for the user to "hunt."
     static let tinyThresholdMax: CGFloat = 50
-    private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+    private static let isIPadDevice = isIPad
     private var tinyThreshold: CGFloat {
         let total = document.totalElements
         let base: CGFloat
@@ -411,7 +409,7 @@ final class ColoringStore: ObservableObject {
         else if total <= 100 { base = 25 }
         else if total <= 200 { base = 35 }
         else { base = Self.tinyThresholdMax }
-        return Self.isIPad ? base * 0.5 : base
+        return Self.isIPadDevice ? base * 0.5 : base
     }
     /// How far (SVG units) to look for adjacent tiny elements
     private var neighborMargin: CGFloat {
@@ -421,7 +419,7 @@ final class ColoringStore: ObservableObject {
         else if total <= 100 { base = 10 }
         else if total <= 200 { base = 15 }
         else { base = 20 }
-        return Self.isIPad ? base * 0.5 : base
+        return Self.isIPadDevice ? base * 0.5 : base
     }
 
     /// BFS cascade: starting from all seed elements, find touching tiny same-group
@@ -455,7 +453,7 @@ final class ColoringStore: ObservableObject {
         guard peekUsesRemaining > 0, !isPeeking, phase == .painting else { return }
         peekUsesRemaining -= 1
         isPeeking = true
-        lightHaptic.impactOccurred()
+        Haptics.lightImpact()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.isPeeking = false
         }
@@ -574,16 +572,13 @@ final class ColoringStore: ObservableObject {
     private func checkCompletion() {
         guard isComplete, phase != .complete, !completionPending else { return }
 
-        // Let the user see the final filled state for a breath before transitioning
+        // Fire immediately so the radial reveal lines up with the final tap
         completionPending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.isComplete, self.phase != .complete else { return }
-            withAnimation(.easeOut(duration: 0.6)) { self.phase = .complete }
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            UserDefaults.standard.set(true, forKey: "onehue.completed.\(self.currentArtwork.id)")
-            self.recordCompletionDay()
-            Task { await CompletionService.shared.reportCompletion(artworkID: self.currentArtwork.id) }
-        }
+        withAnimation(.easeOut(duration: 0.6)) { phase = .complete }
+        Haptics.success()
+        UserDefaults.standard.set(true, forKey: "onehue.completed.\(currentArtwork.id)")
+        recordCompletionDay()
+        Task { await CompletionService.shared.reportCompletion(artworkID: currentArtwork.id) }
     }
 
     // MARK: - Debug

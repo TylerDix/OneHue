@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import QuartzCore
 
 // MARK: - Fill Animation Model
@@ -32,9 +31,6 @@ struct CanvasView: View {
     // Gesture state
     @State private var isZooming: Bool = false
 
-    // Zoom momentum tracking
-    @State private var lastZoomTime: Date = .distantPast
-    @State private var zoomVelocity: CGFloat = 0  // multiplier per second
 
     // Phase animation
     @State private var showNumbers: Bool = true
@@ -44,8 +40,7 @@ struct CanvasView: View {
     @State private var activeAnimations: [FillAnimation] = []
     @State private var flashTick: UInt = 0
     @State private var blobOrigin: CGPoint? = nil
-    @State private var animationLink: CADisplayLink?
-    @State private var animationTarget: DisplayLinkTarget?
+    @State private var animationLink: PlatformDisplayLink?
 
     // Pulse guide — breathing glow on largest unfilled cluster
     @State private var pulsePhase: Double = 0
@@ -59,11 +54,11 @@ struct CanvasView: View {
     @AppStorage("onehue.wobbleCount") private var wobbleCount: Int = 0
 
     private let minZoom: CGFloat = 1.0
-    private let maxZoom: CGFloat = 8.0
-    /// Soft limits allow temporary overshoot during pinch for rubbery feel.
-    private var softMinZoom: CGFloat { minZoom * 0.4 }
-    private var softMaxZoom: CGFloat { maxZoom * 1.5 }
-    private static let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+    private let maxZoom: CGFloat = 4.0
+    /// Soft limits allow slight overshoot during pinch for gentle resistance feel.
+    private var softMinZoom: CGFloat { minZoom * 0.85 }
+    private var softMaxZoom: CGFloat { maxZoom * 1.12 }
+    private static let isIPadDevice = isIPad
     /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
     private var defaultZoom: CGFloat { 1.0 }
 
@@ -515,56 +510,39 @@ struct CanvasView: View {
             .onChanged { value in
                 if !isZooming {
                     isZooming = true
-                    zoomVelocity = 0
-                    lastZoomTime = .now
                 }
-                // Allow overshoot past limits (rubber-band), clamped to soft limits
+                // Allow slight overshoot past limits (gentle resistance), clamped to soft limits
                 let rawZoom = lastZoom * value
                 let newZoom = min(max(rawZoom, softMinZoom), softMaxZoom)
 
-                // Track zoom velocity (ratio change per second)
-                let now = Date.now
-                let dt = now.timeIntervalSince(lastZoomTime)
-                if dt > 0.01, currentZoom > 0.01 {
-                    let instantVelocity = (newZoom / currentZoom - 1.0) / dt
-                    zoomVelocity = zoomVelocity * 0.3 + instantVelocity * 0.7
-                }
-                lastZoomTime = now
-
-                // Interpolated zoom — slight lag before visual response for deliberate feel
-                withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.75)) {
-                    if currentZoom > 0.01 {
-                        let scale = newZoom / currentZoom
-                        offset = CGSize(
-                            width:  offset.width  * scale,
-                            height: offset.height * scale
-                        )
-                    }
-                    currentZoom = newZoom
-                }
-            }
-            .onEnded { _ in
-                // Apply momentum: project zoom forward based on velocity
-                let momentumDuration: CGFloat = 0.5
-                var projectedZoom = currentZoom * (1.0 + zoomVelocity * momentumDuration)
-                // Clamp to hard limits
-                projectedZoom = min(max(projectedZoom, minZoom), maxZoom)
-
-                let scale = projectedZoom / max(currentZoom, 0.01)
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.58)) {
+                // Direct tracking — no spring lag during active pinch
+                if currentZoom > 0.01 {
+                    let scale = newZoom / currentZoom
                     offset = CGSize(
                         width:  offset.width  * scale,
                         height: offset.height * scale
                     )
-                    currentZoom = projectedZoom
+                }
+                currentZoom = newZoom
+            }
+            .onEnded { _ in
+                // Settle to hard limits — no momentum, just a smooth snap back
+                let clampedZoom = min(max(currentZoom, minZoom), maxZoom)
+
+                let scale = clampedZoom / max(currentZoom, 0.01)
+                withAnimation(.easeOut(duration: 0.25)) {
+                    offset = CGSize(
+                        width:  offset.width  * scale,
+                        height: offset.height * scale
+                    )
+                    currentZoom = clampedZoom
                 }
 
-                lastZoom = projectedZoom
+                lastZoom = clampedZoom
                 lastOffset = offset
-                zoomVelocity = 0
 
-                // Clamp offset after spring settles
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Clamp offset after animation settles
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     clampOffset()
                 }
 
@@ -731,11 +709,11 @@ struct CanvasView: View {
 
     // MARK: - Animation Loop
 
-    /// Starts a CADisplayLink-driven loop for blob animations. Runs at display
+    /// Starts a display-link-driven loop for blob animations. Runs at display
     /// refresh rate and automatically stops when all animations finish.
     private func startAnimationLoop() {
         guard animationLink == nil else { return }
-        let target = DisplayLinkTarget { [self] in
+        let link = PlatformDisplayLink { [self] in
             // Tick the Canvas redraw
             flashTick &+= 1
 
@@ -747,16 +725,13 @@ struct CanvasView: View {
                 stopAnimationLoop()
             }
         }
-        animationTarget = target
-        let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
-        link.add(to: .main, forMode: .common)
+        link.start()
         animationLink = link
     }
 
     private func stopAnimationLoop() {
-        animationLink?.invalidate()
+        animationLink?.stop()
         animationLink = nil
-        animationTarget = nil
     }
 
     // MARK: - Pulse Guide
@@ -881,15 +856,13 @@ struct SVGCanvasRenderer: View {
     private static let checkerImageDark  = makeCheckerImage(r: 0, g: 0, b: 0, alpha: 0.22)
 
     /// Returns true when a color is light enough that white overlays would be invisible.
-    /// Cached to avoid UIColor HSB conversion every frame.
+    /// Cached to avoid HSB conversion every frame.
     private static var lightColorCache: [Int: Bool] = [:]
     private static func isLightColor(_ color: Color) -> Bool {
         let key = color.hashValue
         if let cached = lightColorCache[key] { return cached }
-        let ui = UIColor(color)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        ui.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        let result = b > 0.75 && s < 0.35
+        let hsb = color.hsbComponents()
+        let result = hsb.brightness > 0.75 && hsb.saturation < 0.35
         lightColorCache[key] = result
         return result
     }
@@ -916,9 +889,10 @@ struct SVGCanvasRenderer: View {
             let now = Date()
 
             // Hairline stroke style to close sub-pixel gaps between adjacent paths
+            // Fixed width — seams get bigger at high zoom, so the repair must too
             let gapStroke = StrokeStyle(lineWidth: 0.4, lineJoin: .round)
 
-            // Pre-compute muted colors once per frame (avoids UIColor HSB conversion per element)
+            // Pre-compute muted colors once per frame (avoids HSB conversion per element)
             var mutedSel: [Int: Color] = [:]
             var mutedOther: [Int: Color] = [:]
             var mutedOverview: [Int: Color] = [:]
@@ -1006,29 +980,31 @@ struct SVGCanvasRenderer: View {
                 }
             }
 
-            // Pass 1.25: Coloring-page boundary lines on all grouped elements.
-            // Visible during painting, dissolves away on completion to reveal seamless art.
-            if strokeDissolve > 0.001 {
-                let boundaryWidth: CGFloat = 0.5
+            // Pass 2: Decorative strokes — boundary lines + unfilled hairlines.
+            // Drawn after all fills so strokes sit on top of adjacent elements.
+            // Stroke widths adapt to zoom so they stay ~constant on screen.
+            let zoomAdj = max(zoomLevel, 1.0)
+            let drawBoundary = strokeDissolve > 0.001
+            let drawHairlines = !isPeeking
+            if drawBoundary || drawHairlines {
+                let boundaryWidth: CGFloat = 0.5 / zoomAdj
                 let boundaryStyle = StrokeStyle(lineWidth: boundaryWidth, lineJoin: .round)
-                let boundaryOpacity = 0.12 * strokeDissolve
-                for element in document.elements {
-                    guard document.elementGroupMap[element.id] != nil else { continue }
-                    ctx.stroke(document.cachedPath(at: element.id), with: .color(.black.opacity(boundaryOpacity)), style: boundaryStyle)
-                }
-            }
-
-            // Pass 1.5: Boundary hairlines on unfilled regions.
-            // Makes the puzzle readable at first glance — users can see distinct pieces.
-            if !isPeeking {
-                let hairlineWidth: CGFloat = 0.6
+                let boundaryOpacity = 0.08 * strokeDissolve
+                let hairlineWidth: CGFloat = 0.6 / zoomAdj
                 let hairlineStyle = StrokeStyle(lineWidth: hairlineWidth, lineJoin: .round)
+
                 for element in document.elements {
-                    guard !filledElements.contains(element.id) else { continue }
                     guard document.elementGroupMap[element.id] != nil else { continue }
-                    let isSelected = document.elementGroupMap[element.id] == selectedGroupIndex
-                    let opacity = isSelected ? 0.22 : 0.14
-                    ctx.stroke(document.cachedPath(at: element.id), with: .color(.white.opacity(opacity)), style: hairlineStyle)
+                    let path = document.cachedPath(at: element.id)
+
+                    if drawBoundary {
+                        ctx.stroke(path, with: .color(.black.opacity(boundaryOpacity)), style: boundaryStyle)
+                    }
+                    if drawHairlines, !filledElements.contains(element.id) {
+                        let isSelected = document.elementGroupMap[element.id] == selectedGroupIndex
+                        let opacity = isSelected ? 0.22 : 0.14
+                        ctx.stroke(path, with: .color(.white.opacity(opacity)), style: hairlineStyle)
+                    }
                 }
             }
 
@@ -1053,7 +1029,7 @@ struct SVGCanvasRenderer: View {
                         layerCtx.fill(Path(vb), with: .tiledImage(checker))
                     }
                     let strokeColor: Color = light ? .black.opacity(0.18) : .white.opacity(0.15)
-                    ctx.stroke(unfilledPath, with: .color(strokeColor), lineWidth: 0.8 / scale)
+                    ctx.stroke(unfilledPath, with: .color(strokeColor), lineWidth: 0.8 / scale / max(zoomLevel, 1.0))
                 }
 
                 // Pass 2.5: Breathing pulse — dark flash for light colors, bright for dark
@@ -1070,7 +1046,6 @@ struct SVGCanvasRenderer: View {
             // Color selected → show all clusters for that group
             if showNumbers, !isPeeking {
                 let showAllGroups = selectedGroupIndex == nil
-                let isLargeScreen = UIDevice.current.userInterfaceIdiom == .pad
                 let minVisible: CGFloat = showAllGroups ? (isLargeScreen ? 5 : 3) : (isLargeScreen ? 4 : 3)
                 let fullVisible: CGFloat = showAllGroups ? (isLargeScreen ? 9 : 6) : (isLargeScreen ? 10 : 8)
 
@@ -1213,7 +1188,7 @@ struct SVGCanvasRenderer: View {
         }
     }
 
-    // MARK: - Color Helpers (cached to avoid UIColor HSB conversion every frame)
+    // MARK: - Color Helpers (cached to avoid HSB conversion every frame)
 
     private static var mutedCache: [Int: Color] = [:]
 
@@ -1225,20 +1200,17 @@ struct SVGCanvasRenderer: View {
         let key = cacheKey(color, mode: selected ? 1 : 0)
         if let cached = mutedCache[key] { return cached }
 
-        let uiColor = UIColor(color)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-
-        let baseBrightness = max(b, 0.35)
+        let hsb = color.hsbComponents()
+        let baseBrightness = max(hsb.brightness, 0.35)
         let result: Color
 
         if selected {
-            result = Color(hue: Double(h),
-                         saturation: Double(s * 0.55),
+            result = Color(hue: Double(hsb.hue),
+                         saturation: Double(hsb.saturation * 0.55),
                          brightness: Double(baseBrightness * 0.65))
         } else {
-            result = Color(hue: Double(h),
-                         saturation: Double(s * 0.06),
+            result = Color(hue: Double(hsb.hue),
+                         saturation: Double(hsb.saturation * 0.06),
                          brightness: Double(baseBrightness * 0.15))
         }
         mutedCache[key] = result
@@ -1251,26 +1223,16 @@ struct SVGCanvasRenderer: View {
         let key = cacheKey(color, mode: 2)
         if let cached = mutedCache[key] { return cached }
 
-        let uiColor = UIColor(color)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        let baseBrightness = max(b, 0.35)
-        let result = Color(hue: Double(h),
-                     saturation: Double(s * 0.10),
+        let hsb = color.hsbComponents()
+        let baseBrightness = max(hsb.brightness, 0.35)
+        let result = Color(hue: Double(hsb.hue),
+                     saturation: Double(hsb.saturation * 0.10),
                      brightness: Double(baseBrightness * 0.22))
         mutedCache[key] = result
         return result
     }
 }
 
-// MARK: - DisplayLink Target
-
-/// Bridging class for CADisplayLink since it requires an @objc target.
-private final class DisplayLinkTarget: NSObject {
-    let callback: () -> Void
-    init(callback: @escaping () -> Void) { self.callback = callback }
-    @objc func tick() { callback() }
-}
 
 // MARK: - Previews
 

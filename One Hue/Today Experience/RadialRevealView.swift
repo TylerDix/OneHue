@@ -83,8 +83,7 @@ private class WaveRevealEngine: ObservableObject {
     /// 0…1 — ring glow brightness
     @Published var ringOpacity: CGFloat = 0
 
-    private var displayLink: CADisplayLink?
-    private var linkTarget: DisplayLinkTarget?
+    private var displayLink: PlatformDisplayLink?
     private var startTime: Date = .now
 
     // Timing
@@ -102,17 +101,14 @@ private class WaveRevealEngine: ObservableObject {
 
     private func startLoop() {
         guard displayLink == nil else { return }
-        let target = DisplayLinkTarget { [weak self] in self?.tick() }
-        linkTarget = target
-        let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
-        link.add(to: .main, forMode: .common)
+        let link = PlatformDisplayLink { [weak self] in self?.tick() }
+        link.start()
         displayLink = link
     }
 
     private func stopLoop() {
-        displayLink?.invalidate()
+        displayLink?.stop()
         displayLink = nil
-        linkTarget = nil
         normalizedRadius = 0
         ringOpacity = 0
     }
@@ -141,14 +137,6 @@ private class WaveRevealEngine: ObservableObject {
     }
 
     deinit {
-        displayLink?.invalidate()
+        displayLink?.stop()
     }
-}
-
-// MARK: - DisplayLink Bridge
-
-private class DisplayLinkTarget {
-    let callback: () -> Void
-    init(callback: @escaping () -> Void) { self.callback = callback }
-    @objc func tick() { callback() }
 }

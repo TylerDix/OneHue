@@ -95,7 +95,7 @@ struct GalleryView: View {
             .background(Color.black)
             .navigationTitle("Gallery")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button {
                         dismiss()
                     } label: {

@@ -10,7 +10,7 @@ struct TodayView: View {
     @State private var showCompletion  = false
     @State private var skipReveal      = false
     @State private var showShareSheet  = false
-    @State private var shareImage: UIImage? = nil
+    @State private var shareImage: PlatformImage? = nil
     @AppStorage("onehue.onboardingShown") private var onboardingShown = false
     @State private var showOnboarding = false
 
@@ -617,10 +617,17 @@ struct TodayView: View {
             .background(Color.black)
         )
         renderer.scale = 2.0
+        #if canImport(UIKit)
         if let image = renderer.uiImage {
             shareImage = image
             showShareSheet = true
         }
+        #elseif canImport(AppKit)
+        if let cgImage = renderer.cgImage {
+            shareImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            showShareSheet = true
+        }
+        #endif
     }
 
     private var shareCaption: String {
@@ -638,6 +645,9 @@ struct TodayView: View {
 
 // MARK: - Share Sheet
 
+#if canImport(UIKit)
+import UIKit
+
 private struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
@@ -647,6 +657,25 @@ private struct ShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
+#elseif canImport(AppKit)
+import AppKit
+
+private struct ShareSheet: NSViewRepresentable {
+    let items: [Any]
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        // Present sharing picker once the view is in the window
+        DispatchQueue.main.async {
+            let picker = NSSharingServicePicker(items: items)
+            picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+#endif
 
 // MARK: - Onboarding Overlay
 

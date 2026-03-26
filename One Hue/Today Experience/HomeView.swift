@@ -92,9 +92,11 @@ struct HomeView: View {
             }
             .background(Color.black)
             .navigationTitle("One Hue")
+            #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                             .font(.system(size: 15, weight: .semibold))
@@ -105,7 +107,9 @@ struct HomeView: View {
             }
             .navigationDestination(isPresented: $coloringActive) {
                 TodayView(store: store, coloringActive: $coloringActive)
+                    #if !os(macOS)
                     .navigationBarHidden(true)
+                    #endif
             }
         }
         .sheet(isPresented: $showSettings) {

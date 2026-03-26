@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SVG Name Matcher</title>
+<style>
+  * { box-sizing: border-box; }
+  body { background: #1a1a1a; color: #fff; font-family: -apple-system, sans-serif; margin: 0; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .info { color: #888; font-size: 13px; margin-bottom: 12px; }
+  .toolbar { position: sticky; top: 0; z-index: 10; background: #1a1a1a; padding: 8px 0 12px; border-bottom: 1px solid #333; margin-bottom: 12px; }
+  .toolbar button { background: #2a6; color: #fff; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 8px; }
+  .toolbar button:hover { background: #3b7; }
+  .toolbar button.secondary { background: #555; }
+  .toolbar button.secondary:hover { background: #666; }
+  .stats { display: inline; margin-left: 16px; color: #aaa; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+  .card { background: #222; border: 1px solid #333; border-radius: 6px; overflow: hidden; transition: border-color 0.2s; }
+  .card.matched { border-color: #2a6; }
+  .card.same { border-color: #666; }
+  .card img { width: 100%; aspect-ratio: 1; display: block; background: #111; cursor: pointer; }
+  .card img.zoomed { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: auto; height: 80vh; z-index: 100; border: 2px solid #fff; border-radius: 4px; }
+  .card .current { padding: 4px 8px; font-size: 11px; color: #f88; background: #2a1515; }
+  .card .current.ok { color: #8f8; background: #152a15; }
+  .card select { width: 100%; background: #333; color: #fff; border: none; padding: 6px 8px; font-size: 12px; cursor: pointer; }
+  .card select option { background: #333; }
+  .card select.matched { background: #1a3a1a; color: #8f8; }
+  .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 99; }
+  .overlay.show { display: block; }
+  #output { display: none; background: #111; color: #0f0; padding: 12px; font-family: monospace; font-size: 11px; white-space: pre-wrap; max-height: 400px; overflow: auto; margin-top: 12px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>SVG Name Matcher — Fix Mismatched Filenames</h1>
+<p class="info">Each image below has the WRONG filename. Select the correct name from the dropdown. Click an image to zoom.</p>
+<div class="toolbar">
+  <button onclick="autoMatch()">Auto-Match (Best Guess)</button>
+  <button class="secondary" onclick="exportMapping()">Export Mapping JSON</button>
+  <button class="secondary" onclick="exportRenameScript()">Export Rename Script</button>
+  <span class="stats" id="stats">0 / 0 matched</span>
+</div>
+<div class="overlay" id="overlay" onclick="closeZoom()"></div>
+<div class="grid" id="grid"></div>
+<pre id="output"></pre>
+
+<script>
+// Mismatched files (confirmed by AI vision analysis)
+const mismatched = [
+  "ancientForestCanopy","arcticOceanIce","auroraLakeshore","autumnEveningGlow",
+  "autumnHarvestField","autumnMoonrise","autumnTwilight","blazingMapleCanopy",
+  "bookshopNight","canyonCampfire","canyonSunsetGlow","coralReef",
+  "cornfieldScarecrow","coveredBridgeSnow","cranberryGrove","crimsonSunrise",
+  "deepSeaAbyss","desertBloomSunset","duskMarketSquare","emberGlow",
+  "foggyCoastMorning","foggyDock","foxGardenArbor","goldenCanyon",
+  "goldenForestLight","harborMoonrise","harvestMoon","holidayMarketNight",
+  "hotAirBalloon","islandShoreline","jadeMountainMist","lighthouseStorm",
+  "lighthouseWaves","machuPicchuLlama","mangroveShallows","mistyMountainPines",
+  "mossyForestFloor","oldCiderMill","openOceanSail","owlCornfieldMoon",
+  "parisianCafe","porcupine","rooftopCellist","rowboatLilyPond",
+  "stargazerTelescope","streetLampReader","sunflowerFarmhouse","sunsetBlaze",
+  "tidalPoolStarfish","tropicalFish","tropicalGardenBirds","tropicalSunsetCove",
+  "veniceGondola","vineyardDusk","vintageToyTrain","wetlandHerons","wildflowerHillside"
+];
+
+// AI-generated descriptions of what each file ACTUALLY shows
+const descriptions = {
+  "ancientForestCanopy": "greenhouse interior with seedlings",
+  "arcticOceanIce": "crab on moonlit beach",
+  "auroraLakeshore": "eagle flying over river valley",
+  "autumnEveningGlow": "hen with chicks at barn door",
+  "autumnHarvestField": "apple orchard with ladder",
+  "autumnMoonrise": "vineyard rows with grapes",
+  "autumnTwilight": "weasel on stone wall with autumn leaves",
+  "blazingMapleCanopy": "desert tortoise in canyon",
+  "bookshopNight": "fox on winter branch with snowflakes",
+  "canyonCampfire": "formal dining table with candles",
+  "canyonSunsetGlow": "cormorant on dock post at sunset",
+  "coralReef": "cardinal on icy branch with snowflakes",
+  "cornfieldScarecrow": "bookshop Night Reader with cat",
+  "coveredBridgeSnow": "cozy cabin interior with fireplace",
+  "cranberryGrove": "Great Wall of China mountains",
+  "crimsonSunrise": "autumn lakeside lodge at twilight",
+  "deepSeaAbyss": "jellyfish in deep blue water",
+  "desertBloomSunset": "coyote in desert at sunset",
+  "duskMarketSquare": "badger in autumn leaves",
+  "emberGlow": "turkey in autumn forest",
+  "foggyCoastMorning": "sea lion on rock in waves",
+  "foggyDock": "snow mountain peak with climber",
+  "foxGardenArbor": "rowboat on pond with dragonflies",
+  "goldenCanyon": "hedgehog in autumn forest",
+  "goldenForestLight": "pheasant in golden wheat field",
+  "harborMoonrise": "sunflower field with lightning",
+  "harvestMoon": "cellist performing against city skyline",
+  "holidayMarketNight": "horse-drawn sleigh on snowy road",
+  "hotAirBalloon": "sailboat on reflective lake",
+  "islandShoreline": "hermit crab on tropical beach",
+  "jadeMountainMist": "herons in cypress tree in misty swamp",
+  "lighthouseStorm": "person on snowy dock at frozen lake",
+  "lighthouseWaves": "origami paper cranes near window",
+  "machuPicchuLlama": "sunflower field with farmhouse",
+  "mangroveShallows": "manatee swimming underwater",
+  "mistyMountainPines": "old fishing trawler on shore",
+  "mossyForestFloor": "cicada on tree trunk",
+  "oldCiderMill": "vintage record player in room",
+  "openOceanSail": "pelican diving into ocean waves",
+  "owlCornfieldMoon": "fox sleeping under garden arbor with roses",
+  "parisianCafe": "person on bench in rain under street lamp",
+  "porcupine": "hedgehog among mushrooms and flowers",
+  "rooftopCellist": "Halloween porch with jack-o-lanterns",
+  "rowboatLilyPond": "owl on fence post at cornfield with moon",
+  "stargazerTelescope": "brown bear in snowy mountains",
+  "streetLampReader": "scarecrow in cornfield under moon",
+  "sunflowerFarmhouse": "hot air balloon over farmland",
+  "sunsetBlaze": "barn owl flying with orange moon",
+  "tidalPoolStarfish": "lone tree in red poppies field",
+  "tropicalFish": "person with umbrella on bridge in city",
+  "tropicalGardenBirds": "tree frog on leaf",
+  "tropicalSunsetCove": "blue heron in golden marsh",
+  "veniceGondola": "bicycle at Parisian cafe",
+  "vineyardDusk": "egret in water at sunset",
+  "vintageToyTrain": "coffee cup on windowsill rainy city",
+  "wetlandHerons": "sea otter in kelp forest",
+  "wildflowerHillside": "hawk on fence post with vineyard"
+};
+
+const basePath = '../One Hue/Artworks/';
+const mapping = {}; // currentName -> correctName
+
+function render() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  mismatched.forEach(name => {
+    const card = document.createElement('div');
+    card.className = 'card' + (mapping[name] ? (mapping[name] === name ? ' same' : ' matched') : '');
+    card.id = 'card-' + name;
+
+    const desc = descriptions[name] || '';
+
+    card.innerHTML = `
+      <img src="${basePath}${name}.svg" onclick="toggleZoom(this)" title="${desc}">
+      <div class="current${mapping[name] === name ? ' ok' : ''}">${name} → ${desc}</div>
+      <select onchange="setMapping('${name}', this.value)" id="sel-${name}">
+        <option value="">-- select correct name --</option>
+        ${mismatched.map(n => `<option value="${n}"${mapping[name]===n?' selected':''}>${n}</option>`).join('')}
+      </select>
+    `;
+    grid.appendChild(card);
+  });
+  updateStats();
+}
+
+function setMapping(currentName, correctName) {
+  if (correctName) {
+    mapping[currentName] = correctName;
+  } else {
+    delete mapping[currentName];
+  }
+  // Update card styling
+  const card = document.getElementById('card-' + currentName);
+  if (card) {
+    card.className = 'card' + (correctName ? (correctName === currentName ? ' same' : ' matched') : '');
+    const cur = card.querySelector('.current');
+    cur.className = 'current' + (correctName === currentName ? ' ok' : '');
+  }
+  updateStats();
+}
+
+function updateStats() {
+  const matched = Object.keys(mapping).length;
+  document.getElementById('stats').textContent = `${matched} / ${mismatched.length} matched`;
+}
+
+function toggleZoom(img) {
+  if (img.classList.contains('zoomed')) {
+    closeZoom();
+  } else {
+    img.classList.add('zoomed');
+    document.getElementById('overlay').classList.add('show');
+  }
+}
+
+function closeZoom() {
+  document.querySelectorAll('img.zoomed').forEach(i => i.classList.remove('zoomed'));
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function autoMatch() {
+  // Apply known confident matches from cycle analysis
+  const knownMatches = {
+    "owlCornfieldMoon": "foxGardenArbor",
+    "foxGardenArbor": "rowboatLilyPond",
+    "rowboatLilyPond": "owlCornfieldMoon",
+    "cornfieldScarecrow": "bookshopNight",
+    "streetLampReader": "cornfieldScarecrow",
+    "machuPicchuLlama": "sunflowerFarmhouse",
+    "sunflowerFarmhouse": "hotAirBalloon",
+    "harvestMoon": "rooftopCellist",
+    "lighthouseStorm": "foggyDock",
+    "veniceGondola": "parisianCafe",
+  };
+
+  Object.entries(knownMatches).forEach(([current, correct]) => {
+    mapping[current] = correct;
+    const sel = document.getElementById('sel-' + current);
+    if (sel) sel.value = correct;
+  });
+  render();
+}
+
+function exportMapping() {
+  const out = document.getElementById('output');
+  out.style.display = 'block';
+  out.textContent = JSON.stringify(mapping, null, 2);
+}
+
+function exportRenameScript() {
+  const out = document.getElementById('output');
+  out.style.display = 'block';
+
+  // Build rename commands using temp names to handle cycles
+  const renames = Object.entries(mapping).filter(([k,v]) => k !== v);
+  let script = '#!/bin/bash\n# SVG rename script - fixes mismatched filenames\n';
+  script += '# Step 1: rename to temp names\n';
+  script += 'cd "One Hue/Artworks"\n\n';
+
+  renames.forEach(([from, to]) => {
+    script += `mv "${from}.svg" "__temp_${from}.svg"\n`;
+  });
+
+  script += '\n# Step 2: rename to correct names\n';
+  renames.forEach(([from, to]) => {
+    script += `mv "__temp_${from}.svg" "${to}.svg"\n`;
+  });
+
+  out.textContent = script;
+}
+
+render();
+</script>
+</body>
+</html>

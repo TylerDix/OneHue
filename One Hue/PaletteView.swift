@@ -13,7 +13,7 @@ struct PaletteView: View {
     @State private var hasAppeared = false
 
     private var swatchSize: CGFloat {
-        UIDevice.current.userInterfaceIdiom == .pad ? 64 : 58
+        isIPad ? 64 : 58
     }
 
     var body: some View {
@@ -183,12 +183,11 @@ struct PaletteView: View {
 
     private static func lighterTint(hex: String) -> Color {
         let (r, g, b) = rgb(from: hex)
-        var h: CGFloat = 0, s: CGFloat = 0, br: CGFloat = 0, a: CGFloat = 0
-        UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &br, alpha: &a)
+        let hsb = rgbToHSB(r: r, g: g, b: b)
         return Color(
-            hue: Double(h),
-            saturation: Double(min(s * 1.1, 1.0)),
-            brightness: Double(min(br + 0.45, 1.0))
+            hue: Double(hsb.hue),
+            saturation: Double(min(hsb.saturation * 1.1, 1.0)),
+            brightness: Double(min(hsb.brightness + 0.45, 1.0))
         )
     }
 
@@ -214,7 +213,7 @@ struct PaletteView: View {
     }
 
     private var swatchSpacing: CGFloat {
-        UIDevice.current.userInterfaceIdiom == .pad ? 16 : 14
+        isIPad ? 16 : 14
     }
 }
 

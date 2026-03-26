@@ -108,7 +108,9 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            Text("\(store.currentArtworkIndex + 1) / \(Artwork.catalog.count)")
+                            let idx = store.currentArtworkIndex + 1
+                            let total = Artwork.catalog.count
+                            Text("\(idx) / \(total)")
                                 .font(.system(.body, design: .monospaced))
                                 .fontWeight(.semibold)
 
@@ -124,7 +126,9 @@ struct SettingsView: View {
 
                         HStack {
                             TextField("Jump to #", text: $jumpText)
+                                #if !os(macOS)
                                 .keyboardType(.numberPad)
+                                #endif
                                 .font(.system(.body, design: .monospaced))
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 120)
@@ -248,7 +252,7 @@ struct SettingsView: View {
             .background(Color.black)
             .navigationTitle("Settings")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
             }
@@ -345,7 +349,9 @@ struct AboutView: View {
         }
         .background(.black)
         .navigationTitle("About")
+        #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 
     private func aboutParagraph(_ text: String) -> some View {

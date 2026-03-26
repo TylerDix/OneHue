@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// Thread-safe LRU cache for parsed SVG documents.
 /// Prevents redundant re-parsing when gallery cells scroll in/out.
@@ -19,7 +18,7 @@ final class SVGDocumentCache: @unchecked Sendable {
 
     private init() {
         memoryObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.didReceiveMemoryWarningNotification,
+            forName: memoryWarningNotification,
             object: nil, queue: nil
         ) { [weak self] _ in
             self?.evictAll()

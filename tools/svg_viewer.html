@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SVG Viewer</title>
+<style>
+  body { background: #1a1a1a; color: #fff; font-family: monospace; margin: 0; padding: 10px; }
+  .controls { position: sticky; top: 0; background: #1a1a1a; padding: 8px; z-index: 10; border-bottom: 1px solid #444; }
+  .controls button { background: #333; color: #fff; border: 1px solid #666; padding: 6px 14px; cursor: pointer; margin-right: 4px; }
+  .controls button:hover { background: #555; }
+  .controls span { margin: 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px 0; }
+  .card { background: #222; border: 1px solid #444; border-radius: 4px; overflow: hidden; }
+  .card img { width: 100%; aspect-ratio: 1; display: block; background: #111; }
+  .card .label { padding: 3px 6px; font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .idx { color: #666; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <button onclick="prevPage()">◀ Prev</button>
+  <button onclick="nextPage()">Next ▶</button>
+  <span id="pageInfo">Page 1</span>
+  <span id="rangeInfo"></span>
+</div>
+<div class="grid" id="grid"></div>
+<script>
+const PER_PAGE = 16;
+let page = 0;
+const names = ["alpacas", "alpineMeadow", "ancientForestCanopy", "ancientRuins", "apiaryGoldenHour", "arcticFox", "arcticFoxSnow", "arcticOceanIce", "auroraLakeshore", "autumnBarn", "autumnBench", "autumnEveningGlow", "autumnForestPath", "autumnHarvestField", "autumnMoonrise", "autumnOrchard", "autumnParkBench", "autumnStonehenge", "autumnTwilight", "bakeryInterior", "baldEagle", "bambooForestPath", "barnAtDawn", "barnOwl", "barnOwlHunting", "beachHammockBooks", "beeGarden", "bicycleHoneysuckle", "bicycleMorningGlories", "bioluminescentBay", "birchTreesAutumn", "birdFish", "bison", "bisonYellowstone", "blazingMapleCanopy", "blueJelly", "bookshopNight", "boxingDayRobin", "bridgeAtDusk", "bridgeAutumn", "butteryflyGarden", "cactusGarden", "candyShop", "canoeLakeSunset", "canyonCampfire", "canyonSunsetGlow", "cappadociaBalloons", "cardinalHolly", "cardinalIcicles", "carolersSnowStreet", "castle", "cathedralInterior", "chameleo", "cherryBlossom", "cherryBlossomTemple", "chickadeeWinterberry", "chineseNewYearDragon", "christmasFireplace", "christmasMarketNight", "christmasTreeWindow", "ciderPressBarn", "clockworkGears", "coastalCliffs", "coastalTidePools", "cobblestoneAlley", "coralLagoon", "coralReef", "cornfieldScarecrow", "countyFairSunset", "coveredBridge", "coveredBridgeAutumn", "coveredBridgeSnow", "cozyCabin", "cozyCabinSmoke", "cozyFarmhouseKitchen", "cozyWindowNook", "cranberryGrove", "cranePink", "crimsonSunrise", "crossCountrySkier", "crystalCave", "dayOfTheDeadAltar", "deepSeaAbyss", "deerAppleOrchard", "deerBirchGrove", "deerDrinking", "deerWinterMoonlight", "desertBloomSunset", "desertMesa", "desertOasis", "dockFishingSunset", "dogSledTeam", "dolphinLeaping", "dragonBoatRace", "dragonFly", "dragonfliesMeadow", "driftwoodPebbles", "duskMarketSquare", "eagleSouring", "elephantFamily", "elephantSavanna", "emberGlow", "emeraldRainforest", "englishCottage", "ermineSnow", "estuaryGoldenHour", "ferrisWheelCarnival", "ferrySunset", "firefliesGlowing", "firefliesTwilight", "fishUnderIce", "fishVillage", "fishingPierSunset", "fishingTrawler", "floatingMarket", "foggyAutumnCemetery", "foggyCoastMorning", "foggyDock", "forestFoxMushrooms", "fountain", "foxGardenArbor", "frozenGrottoFalls", "frozenLakeFishing", "frozenPondFrog", "frozenWaterfall", "frozenWaterfallBlue", "gardenGateRoses", "gazelleSavanna", "geeseMigration", "giantPanda", "gingerbreadHouse", "gingerbreadHouseSnow", "gingerbreadVillage", "goldenCanyon", "goldenForestLight", "goldenSailboat", "gondolaSkiLift", "gorilla", "greatWallAutumn", "greenhouseSeedlings", "grizzlySalmon", "hammockBeach", "harborLowTide", "harborMoonrise", "harborRowboats", "hareSpringThaw", "harvestMoon", "hauntedMansionDusk", "heronDockDawn", "heronGoldenHour", "heronMoonlitLake", "hibernatingHedgehog", "hillsideVillage", "holidayMarketNight", "horseSleighWoodland", "hotAir", "hotAirBalloon", "hotAirBalloonLavender", "hotSpring", "hummingbird", "hummingbirdGarden", "humpbackWhale", "iceCastleAurora", "iceCave", "iceFishingShanty", "iceSkaters", "icicleCave", "islandShoreline", "jadeMountainMist", "japaneseGarden", "japaneseGardenKoi", "japanesePagoda", "jelly", "junglePool", "jungleWaterfall", "kayakLakeshore", "kelpForest", "kingfisher", "kingfisherDive", "kiteFestival", "koala", "koiPond", "lanternFestival", "libraryRoom", "lighthouseCliffs", "lighthouseDusk", "lighthouseIcyWaves", "lighthouseStorm", "lighthouseWaves", "lighthouseWinterStorm", "lunarLanterns", "machuPicchuLlama", "magnoliaBlossoms", "mangroveShallows", "mantaRay", "mapleSyrupTapping", "mardiGrasMasks", "maroonTemple", "marshlandDawn", "mermaidLagoon", "mistyMountainPines", "monetBridge", "moonlitHarbor", "moose", "mooseAtTwilight", "moroccanSouk", "mossyForestFloor", "mossyWaterfall", "mountainGoat", "mountainHotSpring", "mountainLakeReflection", "mountainRowboat", "mushroomForest", "newYearsRooftop", "northernLightsCabin", "nutcrackerSoldier", "observatory", "octopusGarden", "octopusTidePool", "oldCiderMill", "openOceanSail", "orcaBreaching", "ospreyDive", "ospryDivingWaves", "ottersThawingRiver", "outdoorMovieNight", "owl", "owlCornfieldMoon", "owlFamily", "pandaBamboo", "paperLanternRiver", "parisianCafe", "parrot", "peacockBlue", "pelicanColorful", "penguinColony", "penguinFam", "penguins", "pingFlamingo", "pinkFlamingo", "pirateShip", "polarBearCub", "polarBearMother", "polarExpressTrain", "porcupine", "potteryWorkshop", "prairieDogTown", "puffinCliff", "pumpkinPatchScarecrow", "purpleMoose", "rainforestWaterfall", "rainyParis", "ravenFoggyValley", "redBridge", "redCoveredBridge", "redPanda", "redSquirrelPinecone", "redwoodCathedral", "reindeerBirchForest", "reindeerSleighNight", "riceTerraces", "riverKayaking", "roadrunner", "robinNestBlossoms", "robinSnowdrops", "robinStoneWall", "rockyCoastline", "romanAqueduct", "rooftopCellist", "rowboatLilyPond", "rowboatShallows", "sailboatLake", "samuraiGarden", "sandDunes", "santaWorkshop", "scarecrowCrowPumpkins", "seaOtter", "seaTurtleCoral", "seahorse", "shorebirdsFlats", "sleepyFox", "slothRainforest", "snowCabin", "snowFox", "snowGlobe", "snowLeopard", "snowmanTwilight", "snowyChurchMidnight", "snowyOwlField", "snowyOwlPerch", "snowyPineTwilight", "snowyVillageRooftops", "solsticeStones", "springLambsDawn", "stainedGlassPeacock", "stargazerTelescope", "stargazingCampfire", "staveChurch", "steamTrainViaduct", "stoneArchCove", "stoneBridgeWinter", "stoneWatermill", "storkNest", "stormPetrelSea", "strawberry", "streetLampReader", "submarinePorthole", "summerMarshReeds", "sunflowerDog", "sunflowerFarmhouse", "sunflowerField", "sunsetBlaze", "sushiBar", "swanGliding", "swanLakeValentine", "tadpolePond", "tallLighthouse", "terracedVineyard", "thanksgivingHarvestTable", "thanksgivingTable", "thunderstormSunflowers", "tidalHarborBoats", "tidalPoolStarfish", "tidePoolStarfish", "tidePools", "tigerStalking", "toucanPerched", "townChurch", "toyWorkshop", "trainStation", "treehouse", "trickOrTreatNight", "tropicalFish", "tropicalGardenBirds", "tropicalSunsetCove", "tropicalWaterfall", "tuscanRoad", "twilightHorizon", "twoParrots", "underwaterShipwreck", "venetianCanal", "venice", "veniceGondola", "vikingLongship", "vineyardDusk", "vintageBiplane", "vintageToyTrain", "volcanoIsland", "walrus", "watchTower", "weirdBird", "wetlandHerons", "wheelbarrowCatNap", "wildflowerHillside", "wildflowerMeadow", "windmill", "windmillTulips", "windowsillPies", "wineCellar", "winterGardenGate", "winterGreenhouse", "winterMarket", "winterSolsticeBonfire", "winterTownSnowman", "wishingWellRoses", "wisteriaArbor", "wisteriaBridge", "wisteriaFlowers", "wisteriaPergola", "wolfMoonlight", "woodworkShop", "wreathWorkshop"];
+const basePath = '../One Hue/Artworks/';
+const totalPages = Math.ceil(names.length / PER_PAGE);
+
+function render() {
+  const start = page * PER_PAGE;
+  const end = Math.min(start + PER_PAGE, names.length);
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (let i = start; i < end; i++) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<img src="${basePath}${names[i]}.svg" onerror="this.style.background='red'"><div class="label"><span class="idx">${i+1}.</span> ${names[i]}</div>`;
+    grid.appendChild(card);
+  }
+  document.getElementById('pageInfo').textContent = `Page ${page+1}/${totalPages}`;
+  document.getElementById('rangeInfo').textContent = `(${start+1}-${end} of ${names.length})`;
+}
+
+function nextPage() { if (page < totalPages - 1) { page++; render(); } }
+function prevPage() { if (page > 0) { page--; render(); } }
+render();
+</script>
+</body>
+</html>
