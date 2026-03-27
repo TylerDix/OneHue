@@ -244,12 +244,11 @@ final class ColoringStore: ObservableObject {
         // Single mutation → one didSet trigger
         filledElements.formUnion(toFill)
 
-        // Auto-complete group when 90%+ filled — forgiveness for invisible stragglers
+        // No per-group auto-complete — user finishes every visible piece.
+        // Only sweep truly invisible slivers (< 5 SVG units) when artwork is
+        // 99%+ done, so the user never gets stuck hunting a 1px sliver.
         let group = document.groups[groupIdx]
-        autoCompleteIfNearlyDone(group)
-
-        // At 95%+ global, sweep remaining tiny elements across all groups
-        autoSweepTinyRemnants()
+        autoSweepInvisibleSlivers()
 
         // Celebrate group completion — user picks next color manually (like HC)
         if group.elementIndices.allSatisfy({ filledElements.contains($0) }) {
@@ -304,43 +303,31 @@ final class ColoringStore: ObservableObject {
 
     /// Complexity-scaled threshold: simpler artworks require higher fill %
     /// before auto-complete kicks in, so users get to finish them by hand.
-    ///   ≤50 elements  → 100% (never auto-completes)
-    ///   51–100        → 97%
-    ///   101–200       → 95%
-    ///   201+          → 90% (original behavior)
+    /// Raised across the board so users tap more pieces manually — the game
+    /// was finishing itself too early and feeling too easy.
+    ///   ≤100 elements → 100% (never auto-completes — user finishes every piece)
+    ///   101–200       → 98%
+    ///   201+          → 96%
     private var autoCompleteThreshold: Double {
         let total = document.totalElements
-        if total <= 50  { return 1.0 }
-        if total <= 100 { return 0.97 }
-        if total <= 200 { return 0.95 }
-        return 0.90
+        if total <= 100 { return 1.0 }
+        if total <= 200 { return 0.98 }
+        return 0.96
     }
 
-    private func autoCompleteIfNearlyDone(_ group: SVGColorGroup) {
-        let total = group.elementIndices.count
-        guard total > 0 else { return }
-        let filled = group.elementIndices.filter { filledElements.contains($0) }.count
-        guard Double(filled) / Double(total) >= autoCompleteThreshold else { return }
-
-        // Only auto-fill tiny/invisible slivers — leave normal-sized pieces for the user
-        let remaining = group.elementIndices.filter { !filledElements.contains($0) }
-        let tinyRemaining = remaining.filter { idx in
-            let el = document.elements[idx]
-            return min(el.bounds.width, el.bounds.height) < tinyThreshold
-        }
-        guard !tinyRemaining.isEmpty else { return }
-        filledElements.formUnion(tinyRemaining)
-    }
-
-    /// Sweep tiny remnants only on complex artworks (>50 elements).
-    private func autoSweepTinyRemnants() {
+    /// Only sweep truly invisible slivers — elements so small the user
+    /// can never find or tap them. Fires at 99%+ completion so the artwork
+    /// can actually finish without the user hunting for a 1px crack.
+    private static let invisibleSliverSize: CGFloat = 5  // SVG units — genuinely invisible
+    private func autoSweepInvisibleSlivers() {
         let total = document.totalElements
-        guard total > 50,
-              Double(filledElements.count) / Double(total) >= autoCompleteThreshold else { return }
+        guard total > 0 else { return }
+        let filledRatio = Double(filledElements.count) / Double(total)
+        guard filledRatio >= 0.99 else { return }
 
         for idx in document.groupedIndices where !filledElements.contains(idx) {
             let el = document.elements[idx]
-            if min(el.bounds.width, el.bounds.height) < tinyThreshold {
+            if min(el.bounds.width, el.bounds.height) < Self.invisibleSliverSize {
                 filledElements.insert(idx)
             }
         }
@@ -355,14 +342,13 @@ final class ColoringStore: ObservableObject {
         let leftover = document.groupedIndices.subtracting(filledElements)
         guard !leftover.isEmpty else { return }
 
-        // Auto-complete if: all remaining are tiny, OR only 1-2 left (don't
-        // make the user hunt for the very last pieces — just finish it).
-        let fewEnoughToFinish = leftover.count <= 2
-        let allTiny = leftover.allSatisfy { idx in
+        // Only auto-finish when every remaining piece is truly invisible
+        // (< 5 SVG units). Never auto-finish visible pieces — user taps those.
+        let allInvisible = leftover.allSatisfy { idx in
             let el = document.elements[idx]
-            return min(el.bounds.width, el.bounds.height) < tinyThreshold
+            return min(el.bounds.width, el.bounds.height) < Self.invisibleSliverSize
         }
-        guard fewEnoughToFinish || allTiny else { return }
+        guard allInvisible else { return }
 
         startFinishingFill(indices: Array(leftover))
     }
@@ -398,16 +384,17 @@ final class ColoringStore: ObservableObject {
     // MARK: - Auto-Fill Tiny Neighbors
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny".
-    /// Scaled by artwork complexity so easy artworks don't auto-grab too many cells.
-    /// iPad uses halved thresholds so more pieces remain for the user to "hunt."
-    static let tinyThresholdMax: CGFloat = 50
+    /// Only truly invisible slivers should be auto-filled — anything the user can
+    /// see and tap should remain for them. Tightened from previous values (max 50)
+    /// because auto-fill was grabbing visible pieces and making the game too easy.
+    static let tinyThresholdMax: CGFloat = 20
     private static let isIPadDevice = isIPad
     private var tinyThreshold: CGFloat {
         let total = document.totalElements
         let base: CGFloat
-        if total <= 50  { base = 15 }
-        else if total <= 100 { base = 25 }
-        else if total <= 200 { base = 35 }
+        if total <= 50  { base = 5 }
+        else if total <= 100 { base = 10 }
+        else if total <= 200 { base = 15 }
         else { base = Self.tinyThresholdMax }
         return Self.isIPadDevice ? base * 0.5 : base
     }

@@ -254,6 +254,7 @@ struct TodayView: View {
             // Peek tip: after 20 fills, if peek was never used
             if !peekTipShown && count == 20
                 && store.peekUsesRemaining == ColoringStore.maxPeeksPerGame {
+                dismissAllHints()
                 withAnimation(.easeOut(duration: 0.4)) { showPeekTip = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                     withAnimation(.easeOut(duration: 0.3)) { showPeekTip = false }
@@ -261,8 +262,9 @@ struct TodayView: View {
                 }
             }
             // Find tip: after 40 fills, if find was never used
-            if !findTipShown && count == 40
+            else if !findTipShown && count == 40
                 && store.findUsesRemaining == ColoringStore.maxFindsPerGame {
+                dismissAllHints()
                 withAnimation(.easeOut(duration: 0.4)) { showFindTip = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                     withAnimation(.easeOut(duration: 0.3)) { showFindTip = false }
@@ -278,6 +280,7 @@ struct TodayView: View {
             if !paletteTipShown, newVal != nil {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                     guard !paletteTipShown else { return }
+                    dismissAllHints()
                     withAnimation(.easeOut(duration: 0.4)) { showPaletteTip = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                         withAnimation(.easeOut(duration: 0.3)) { showPaletteTip = false }
@@ -441,6 +444,7 @@ struct TodayView: View {
 
     // MARK: - Helpers
 
+    /// Dismiss all tips permanently (user interacted, so they don't need them)
     private func dismissTips() {
         withAnimation(.easeOut(duration: 0.2)) {
             showPeekTip = false
@@ -450,6 +454,19 @@ struct TodayView: View {
         peekTipShown = true
         findTipShown = true
         paletteTipShown = true
+    }
+
+    /// Dismiss all visible hints/tips without marking them as permanently shown.
+    /// Used before showing a new tip so only one is visible at a time.
+    private func dismissAllHints() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            showPeekTip = false
+            showFindTip = false
+            showPaletteTip = false
+            showStuckHint = false
+        }
+        stuckTimer?.invalidate()
+        stuckTimer = nil
     }
 
     private static let utcDateFormatter: DateFormatter = {
@@ -481,6 +498,8 @@ struct TodayView: View {
         stuckTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { _ in
             Task { @MainActor in
                 guard store.phase == .painting, store.globalRemaining > 0 else { return }
+                // Don't show stuck hint if another tip is visible
+                guard !showPeekTip, !showFindTip, !showPaletteTip else { return }
                 withAnimation(.easeOut(duration: 0.4)) { showStuckHint = true }
                 // Auto-dismiss after 6s if not acted on
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
