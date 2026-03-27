@@ -120,7 +120,14 @@ final class ColoringStore: ObservableObject {
         return catalog[currentArtworkIndex]
     }
 
-    // MARK: - Init
+    // MARK: - Lifecycle
+
+    deinit {
+        if let observer = soundObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        persistTimer?.invalidate()
+    }
 
     init() {
         let (artwork, index) = Artwork.today()

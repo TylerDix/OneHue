@@ -69,7 +69,8 @@ struct SVGDocument: Identifiable {
             if paths == nil {
                 paths = elements.map { Path($0.path) }
             }
-            return paths![index]
+            guard let paths, index >= 0, index < paths.count else { return Path() }
+            return paths[index]
         }
     }
 
