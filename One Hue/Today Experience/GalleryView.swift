@@ -16,8 +16,7 @@ struct GalleryView: View {
     private let timer = Timer.publish(every: 60, on: .main, in: .common)
 
     private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
+        GridItem(.adaptive(minimum: 160), spacing: 14)
     ]
 
     // MARK: - Month-sectioned data
@@ -92,7 +91,7 @@ struct GalleryView: View {
                     }
                 }
             }
-            .background(Color.black)
+            .background(Color.appBackground)
             .navigationTitle("Gallery")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -250,7 +249,7 @@ struct GalleryCell: View {
         Button(action: onTap) {
             VStack(spacing: 0) {
                 // Thumbnail — portrait container using document's actual aspect ratio
-                Color.black
+                Color.appBackground
                     .aspectRatio(document?.aspectRatio ?? (1200.0 / 1536.0), contentMode: .fit)
                     .overlay {
                         if let doc = document {

@@ -11,8 +11,7 @@ struct HomeView: View {
     private let timer = Timer.publish(every: 60, on: .main, in: .common)
 
     private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
+        GridItem(.adaptive(minimum: 160), spacing: 14)
     ]
 
     private var todayIndex: Int { Artwork.today().index }
@@ -90,7 +89,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .background(Color.black)
+            .background(Color.appBackground)
             .navigationTitle("One Hue")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -147,7 +146,7 @@ struct HomeView: View {
         } label: {
             VStack(spacing: 0) {
                 // Thumbnail
-                Color.black
+                Color.appBackground
                     .aspectRatio(heroDocument?.aspectRatio ?? (1200.0 / 1200.0), contentMode: .fit)
                     .overlay {
                         if let doc = heroDocument {

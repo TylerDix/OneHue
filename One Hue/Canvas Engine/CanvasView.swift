@@ -58,8 +58,6 @@ struct CanvasView: View {
     /// Soft limits allow slight overshoot during pinch for gentle resistance feel.
     private var softMinZoom: CGFloat { minZoom * 0.85 }
     private var softMaxZoom: CGFloat { maxZoom * 1.12 }
-    private static let isIPadDevice = isIPad
-    /// iPad starts slightly zoomed so artwork fills the large screen and requires panning.
     private var defaultZoom: CGFloat { 1.0 }
 
     private var contentOverflows: Bool {
@@ -601,11 +599,14 @@ struct CanvasView: View {
 
     // MARK: - Layout
 
+    /// Aspect-fit: the entire artwork is always visible at zoom 1.0, with letterboxing
+    /// (vertical or horizontal) when the viewport's aspect doesn't match the artwork's.
+    /// This keeps the "see the whole picture" feel on every device and orientation.
     private func renderedSize(in available: CGSize) -> CGSize {
         let aspect = store.document.aspectRatio
         let hByWidth  = available.width / aspect
         let wByHeight = available.height * aspect
-        if hByWidth >= available.height {
+        if hByWidth <= available.height {
             return CGSize(width: available.width, height: hByWidth)
         }
         return CGSize(width: wByHeight, height: available.height)
@@ -1210,33 +1211,34 @@ struct SVGCanvasRenderer: View {
         if let cached = mutedCache[key] { return cached }
 
         let hsb = color.hsbComponents()
-        let baseBrightness = max(hsb.brightness, 0.35)
+        let baseBrightness = max(hsb.brightness, 0.45)
         let result: Color
 
         if selected {
             result = Color(hue: Double(hsb.hue),
-                         saturation: Double(hsb.saturation * 0.55),
-                         brightness: Double(baseBrightness * 0.65))
+                         saturation: Double(hsb.saturation * 0.65),
+                         brightness: Double(baseBrightness * 0.85))
         } else {
             result = Color(hue: Double(hsb.hue),
-                         saturation: Double(hsb.saturation * 0.06),
-                         brightness: Double(baseBrightness * 0.15))
+                         saturation: Double(hsb.saturation * 0.20),
+                         brightness: Double(baseBrightness * 0.35))
         }
         mutedCache[key] = result
         return result
     }
 
     /// Muted color for the "no color selected" overview state.
-    /// Kept dim so the artwork emerges through coloring, not previewed upfront.
+    /// Light enough that the artwork is legible at a glance, not so light that the
+    /// reveal-on-fill stops feeling rewarding.
     private static func computeMutedOverview(_ color: Color) -> Color {
         let key = cacheKey(color, mode: 2)
         if let cached = mutedCache[key] { return cached }
 
         let hsb = color.hsbComponents()
-        let baseBrightness = max(hsb.brightness, 0.35)
+        let baseBrightness = max(hsb.brightness, 0.45)
         let result = Color(hue: Double(hsb.hue),
-                     saturation: Double(hsb.saturation * 0.10),
-                     brightness: Double(baseBrightness * 0.22))
+                     saturation: Double(hsb.saturation * 0.25),
+                     brightness: Double(baseBrightness * 0.45))
         mutedCache[key] = result
         return result
     }

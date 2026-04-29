@@ -15,6 +15,14 @@ typealias PlatformImage = UIImage
 typealias PlatformImage = NSImage
 #endif
 
+// MARK: - App Background
+
+extension Color {
+    /// The app's background color. Soft near-black instead of pure #000 — pure black
+    /// reads as too harsh under low light and against the canvas. Tweak in one place.
+    static let appBackground = Color(white: 0.07)
+}
+
 // MARK: - HSB Color Extraction
 
 /// Cross-platform HSB extraction from a SwiftUI Color.

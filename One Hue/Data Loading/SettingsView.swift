@@ -1,4 +1,3 @@
-import StoreKit
 import SwiftUI
 import UserNotifications
 
@@ -76,7 +75,7 @@ struct SettingsView: View {
                         Text("One Hue")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundStyle(.white.opacity(0.9))
-                        Text("Free. No ads. Ever.")
+                        Text("No ads. No tracking. Ever.")
                             .font(.system(size: 14, weight: .regular, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
@@ -249,7 +248,7 @@ struct SettingsView: View {
 
             }
             .scrollContentBackground(.hidden)
-            .background(Color.black)
+            .background(Color.appBackground)
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -314,24 +313,10 @@ struct AboutView: View {
 
                 VStack(spacing: 16) {
                     aboutParagraph("A new artwork appears each day — the same one for everyone. Pick a color, tap the numbered regions, and watch it come\u{00A0}alive.")
-                    aboutParagraph("No ads. No accounts. No in-app purchases blocking content. Just color, quiet, and the occasional\u{00A0}sarcastic\u{00A0}remark.")
+                    aboutParagraph("No ads. No accounts. No subscriptions. Just color, quiet, and the occasional dry\u{00A0}remark.")
                     aboutParagraph("Made by one person who wanted something calm to do with\u{00A0}his\u{00A0}hands.")
                 }
                 .padding(.horizontal, 28)
-
-                // Support section
-                VStack(spacing: 16) {
-                    Rectangle()
-                        .fill(.white.opacity(0.06))
-                        .frame(width: 56, height: 0.5)
-
-                    Text("Support One Hue")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.5))
-
-                    TipJarInline()
-                }
-                .padding(.top, 48)
 
                 VStack(spacing: 18) {
                     Rectangle()
@@ -347,7 +332,7 @@ struct AboutView: View {
                 Spacer(minLength: 60)
             }
         }
-        .background(.black)
+        .background(Color.appBackground)
         .navigationTitle("About")
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -360,82 +345,6 @@ struct AboutView: View {
             .foregroundStyle(.white.opacity(0.7))
             .lineSpacing(4)
             .multilineTextAlignment(.center)
-    }
-}
-
-// MARK: - Tip Jar (Inline for About page)
-
-private struct TipJarInline: View {
-    @StateObject private var tipJar = TipJarManager.shared
-
-    var body: some View {
-        VStack(spacing: 12) {
-            if tipJar.purchaseState == .thankYou {
-                VStack(spacing: 6) {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.pink.opacity(0.8))
-                    Text("Thank you!")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.8))
-                    Text("Your support means the world.")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-                .transition(.opacity)
-            } else if tipJar.products.isEmpty && !tipJar.didFinishLoading {
-                ProgressView()
-                    .padding(.vertical, 8)
-            } else if tipJar.products.isEmpty {
-                // Products unavailable — hide tip jar gracefully
-                EmptyView()
-            } else {
-                HStack(spacing: 10) {
-                    ForEach(tipJar.products) { product in
-                        Button {
-                            Task { await tipJar.purchase(product) }
-                        } label: {
-                            VStack(spacing: 6) {
-                                Image(systemName: tipIcon(for: product))
-                                    .font(.system(size: 16))
-                                    .foregroundStyle(.white.opacity(0.6))
-                                Text(product.displayPrice)
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundStyle(.white.opacity(0.8))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(.white.opacity(0.08))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(tipJar.purchaseState == .purchasing)
-                    }
-                }
-                .padding(.horizontal, 32)
-
-                if case .failed(let msg) = tipJar.purchaseState {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.7))
-                }
-            }
-        }
-    }
-
-    private func tipIcon(for product: Product) -> String {
-        switch product.id {
-        case "com.dix.OneHue.tip.small":  return "cup.and.saucer"
-        case "com.dix.OneHue.tip.medium": return "heart"
-        case "com.dix.OneHue.tip.large":  return "heart.fill"
-        default: return "heart"
-        }
     }
 }
 

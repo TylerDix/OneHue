@@ -64,7 +64,7 @@ struct PaletteView: View {
         // Fixed height: swatch + top padding + bottom padding
         .frame(height: swatchSize + 36)
         .clipped()
-        .background(Color.black)
+        .background(Color.appBackground)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 hasAppeared = true
@@ -229,6 +229,6 @@ struct PaletteView: View {
         justCompletedGroupIndex: nil
     )
     .padding()
-    .background(Color.black)
+    .background(Color.appBackground)
 }
 #endif
