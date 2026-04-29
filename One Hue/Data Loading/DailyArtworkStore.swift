@@ -267,8 +267,18 @@ final class ColoringStore: ObservableObject {
             justCompletedGroupIndex = groupIdx
             selectedGroupIndex = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                guard self?.justCompletedGroupIndex == groupIdx else { return }
-                self?.justCompletedGroupIndex = nil
+                guard let self, self.justCompletedGroupIndex == groupIdx else { return }
+                self.justCompletedGroupIndex = nil
+
+                // Auto-select if only one color remains — no reason to make the user tap
+                let incomplete = self.document.groups.filter { group in
+                    group.elementIndices.contains { !self.filledElements.contains($0) }
+                }
+                if incomplete.count == 1 {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        self.selectedGroupIndex = incomplete[0].id
+                    }
+                }
             }
         }
 

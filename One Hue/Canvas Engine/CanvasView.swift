@@ -599,17 +599,27 @@ struct CanvasView: View {
 
     // MARK: - Layout
 
-    /// Aspect-fit: the entire artwork is always visible at zoom 1.0, with letterboxing
-    /// (vertical or horizontal) when the viewport's aspect doesn't match the artwork's.
-    /// This keeps the "see the whole picture" feel on every device and orientation.
+    /// iPad: aspect-fit (the whole artwork is visible at zoom 1.0).
+    /// iPhone: aspect-fill (artwork fills the canvas, edges may crop). Mom-tested:
+    /// black letterbox bars read as "hidden art" on tall phone screens. Filling avoids
+    /// that confusion at the cost of off-screen edges, which the existing peek wobble
+    /// + edge-glow indicators advertise.
     private func renderedSize(in available: CGSize) -> CGSize {
         let aspect = store.document.aspectRatio
-        let hByWidth  = available.width / aspect
-        let wByHeight = available.height * aspect
-        if hByWidth <= available.height {
-            return CGSize(width: available.width, height: hByWidth)
+        if isIPad {
+            // Aspect-fit
+            let hByWidth = available.width / aspect
+            if hByWidth <= available.height {
+                return CGSize(width: available.width, height: hByWidth)
+            }
+            return CGSize(width: available.height * aspect, height: available.height)
         }
-        return CGSize(width: wByHeight, height: available.height)
+        // Aspect-fill (iPhone)
+        let viewAspect = available.width / available.height
+        if aspect > viewAspect {
+            return CGSize(width: available.height * aspect, height: available.height)
+        }
+        return CGSize(width: available.width, height: available.width / aspect)
     }
 
     /// Clamp offset values without animation — call inside withAnimation blocks.
@@ -674,28 +684,31 @@ struct CanvasView: View {
     }
     #endif
 
-    /// Horizontal wobble to hint that the canvas is pannable.
-    /// Fires every time an artwork is opened.
+    /// Slow horizontal pan hint. Only fires when content actually overflows the
+    /// viewport (otherwise there's nothing to "hint" at). Long, single drift
+    /// reads as "this scrolls" rather than the prior back-and-forth jitter.
     private func peekWobbleIfNeeded() {
-        guard !hasWobbled, wobbleCount < 3 else { return }
+        guard !hasWobbled, wobbleCount < 8 else { return }
+        guard currentRenderSize.width > viewportSize.width + 1 ||
+              currentRenderSize.height > viewportSize.height + 1 else { return }
         hasWobbled = true
         wobbleCount += 1
 
-        let drift: CGFloat = 18
-        // Slight delay so the artwork is fully visible first
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            withAnimation(.easeOut(duration: 0.2)) {
-                offset.width = drift
+        // Drift toward whichever axis actually overflows — prefer the larger overflow.
+        let overflowX = max(0, currentRenderSize.width - viewportSize.width) / 2
+        let overflowY = max(0, currentRenderSize.height - viewportSize.height) / 2
+        let driftX: CGFloat = overflowX > 0 ? min(overflowX * 0.85, 70) : 0
+        let driftY: CGFloat = (overflowX <= 0 && overflowY > 0) ? min(overflowY * 0.85, 70) : 0
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.7)) {
+                offset.width = driftX
+                offset.height = driftY
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    offset.width = -drift
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
-                        offset = .zero
-                        lastOffset = .zero
-                    }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
+                    offset = .zero
+                    lastOffset = .zero
                 }
             }
         }
@@ -1164,29 +1177,39 @@ struct SVGCanvasRenderer: View {
 
                     placedRects.append(rect)
 
-                    let pillOpacity: Double
                     let textWeight: Font.Weight
                     let textOpacity: Double
+
                     if label.isOverview {
-                        pillOpacity = (label.needsPill ? 0.25 : 0.18) * label.alpha
+                        // Overview: circular badge, softer gray text, less visual noise
+                        let circleR = label.fontSize * 0.7
+                        let circlePath = Path(ellipseIn: CGRect(
+                            x: center.x - circleR, y: center.y - circleR,
+                            width: circleR * 2, height: circleR * 2
+                        ))
+                        let bgOpacity = (label.needsPill ? 0.30 : 0.20) * label.alpha
+                        ctx.fill(circlePath, with: .color(.black.opacity(bgOpacity)))
+                        ctx.stroke(circlePath, with: .color(.white.opacity(0.08 * label.alpha)),
+                                   lineWidth: 0.5)
                         textWeight = isLargeScreen ? .regular : .medium
-                        textOpacity = 0.5 * label.alpha
+                        textOpacity = 0.55 * label.alpha
                     } else {
-                        pillOpacity = (label.needsPill ? 0.65 : 0.5) * label.alpha
+                        // Selected group: rounded pill, bolder text
+                        let pillOpacity = (label.needsPill ? 0.65 : 0.5) * label.alpha
+                        let pillW = label.fontSize * 1.1
+                        let pillH = label.fontSize * 1.3
+                        let pillRect = CGRect(
+                            x: center.x - pillW / 2,
+                            y: center.y - pillH / 2,
+                            width: pillW,
+                            height: pillH
+                        )
+                        let pill = Path(roundedRect: pillRect,
+                                        cornerRadius: label.fontSize * 0.3)
+                        ctx.fill(pill, with: .color(.black.opacity(pillOpacity)))
                         textWeight = isLargeScreen ? .medium : .semibold
                         textOpacity = label.alpha
                     }
-                    let pillW = label.fontSize * 1.1
-                    let pillH = label.fontSize * 1.3
-                    let pillRect = CGRect(
-                        x: center.x - pillW / 2,
-                        y: center.y - pillH / 2,
-                        width: pillW,
-                        height: pillH
-                    )
-                    let pill = Path(roundedRect: pillRect,
-                                    cornerRadius: label.fontSize * 0.3)
-                    ctx.fill(pill, with: .color(.black.opacity(pillOpacity)))
 
                     var text = AttributedString("\(label.groupNumber)")
                     text.font = .system(size: label.fontSize, weight: textWeight, design: .rounded)
@@ -1243,7 +1266,6 @@ struct SVGCanvasRenderer: View {
         return result
     }
 }
-
 
 // MARK: - Previews
 

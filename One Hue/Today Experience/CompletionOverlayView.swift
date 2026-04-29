@@ -12,6 +12,7 @@ struct CompletionOverlayView: View {
     var onNext: (() -> Void)? = nil
     var onGallery: (() -> Void)? = nil
     var onShare: (() -> Void)? = nil
+    var onColorAgain: (() -> Void)? = nil
     var isTodayArtwork: Bool = false
     /// Skip the staged reveal and show everything immediately (e.g. cold launch
     /// with an already-completed artwork).
@@ -25,8 +26,13 @@ struct CompletionOverlayView: View {
     @State private var showNextButton = false
 
     // Feedback state
-    /// Toggle for testing: true = 5-star rating, false = thumbs up/down (production)
+    /// 5-star + comment in DEBUG builds (granular per-artwork testing feedback);
+    /// thumbs up/down in release (lighter-weight signal for shipping users).
+    #if DEBUG
+    private static let useStarRating = true
+    #else
     private static let useStarRating = false
+    #endif
     @State private var feedbackSubmitted = false
     @State private var starRating: Int = 0
     @State private var starComment: String = ""
@@ -161,25 +167,12 @@ struct CompletionOverlayView: View {
                 } else {
                     // Thumbs up/down (production)
                     HStack(spacing: 20) {
-                        Button { submitRating(5) } label: {
-                            Image(systemName: "hand.thumbsup")
-                                .font(.system(size: 22))
-                                .foregroundStyle(.white.opacity(0.6))
-                                .padding(10)
-                                .background(Circle().fill(.white.opacity(0.08)))
+                        thumbButton(systemName: "hand.thumbsup", label: "Like this artwork") {
+                            submitRating(5)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Like this artwork")
-
-                        Button { submitRating(1) } label: {
-                            Image(systemName: "hand.thumbsdown")
-                                .font(.system(size: 22))
-                                .foregroundStyle(.white.opacity(0.6))
-                                .padding(10)
-                                .background(Circle().fill(.white.opacity(0.08)))
+                        thumbButton(systemName: "hand.thumbsdown", label: "Dislike this artwork") {
+                            submitRating(1)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Dislike this artwork")
                     }
                     .transition(Self.fadeRise)
                 }
@@ -187,56 +180,77 @@ struct CompletionOverlayView: View {
 
             if feedbackSubmitted {
                 Text("Thanks!")
-                    .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .transition(Self.fadeRise)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.7).combined(with: .opacity)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.6)),
+                        removal: .opacity
+                    ))
             }
 
             // Action buttons
             if showNextButton {
-                HStack(spacing: 12) {
-                    if let onShare {
-                        Button(action: onShare) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 12, weight: .semibold))
-                                Text("Share")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                VStack(spacing: 10) {
+                    HStack(spacing: 12) {
+                        if let onShare {
+                            Button(action: onShare) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Share")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                }
+                                .foregroundStyle(.white.opacity(0.75))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(.white.opacity(0.15)))
                             }
-                            .foregroundStyle(.white.opacity(0.75))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Capsule().fill(.white.opacity(0.15)))
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+
+                        if isTodayArtwork, let onGallery {
+                            Button(action: onGallery) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square.grid.2x2")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Gallery")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                }
+                                .foregroundStyle(.white.opacity(0.75))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(.white.opacity(0.15)))
+                            }
+                            .buttonStyle(.plain)
+                        } else if let onNext {
+                            Button(action: onNext) {
+                                HStack(spacing: 6) {
+                                    Text("Next")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    Image(systemName: "arrow.right")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .foregroundStyle(.white.opacity(0.75))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(.white.opacity(0.15)))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
 
-                    if isTodayArtwork, let onGallery {
-                        Button(action: onGallery) {
+                    if let onColorAgain {
+                        Button(action: onColorAgain) {
                             HStack(spacing: 6) {
-                                Image(systemName: "square.grid.2x2")
-                                    .font(.system(size: 12, weight: .semibold))
-                                Text("Gallery")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Color again")
+                                    .font(.system(size: 13, weight: .regular, design: .rounded))
                             }
-                            .foregroundStyle(.white.opacity(0.75))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Capsule().fill(.white.opacity(0.15)))
-                        }
-                        .buttonStyle(.plain)
-                    } else if let onNext {
-                        Button(action: onNext) {
-                            HStack(spacing: 6) {
-                                Text("Next")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundStyle(.white.opacity(0.75))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Capsule().fill(.white.opacity(0.15)))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
                         }
                         .buttonStyle(.plain)
                     }
@@ -336,6 +350,21 @@ struct CompletionOverlayView: View {
         }
     }
 
+    // MARK: - Thumb Button
+
+    @ViewBuilder
+    private func thumbButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 22))
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(10)
+                .background(Circle().fill(.white.opacity(0.08)))
+        }
+        .buttonStyle(ThumbButtonStyle())
+        .accessibilityLabel(label)
+    }
+
     // MARK: - Helpers
 
     private func countText(_ count: Int) -> String {
@@ -367,7 +396,19 @@ struct CompletionOverlayView: View {
         let diff = utcCal.dateComponents([.hour, .minute], from: now, to: midnight)
         let h = diff.hour ?? 0
         let m = diff.minute ?? 0
-        countdownText = "New image in \(h)h \(m)m"
+        if h > 0 {
+            countdownText = "New artwork in \(h)h \(m)m"
+        } else {
+            countdownText = "New artwork in \(m)m"
+        }
+    }
+}
+
+private struct ThumbButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

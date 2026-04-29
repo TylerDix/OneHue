@@ -51,11 +51,17 @@ struct HomeView: View {
 
                     // MARK: - Grid
                     if sections.isEmpty {
-                        Text(filter == .completed ? "No completed artworks yet" : "All artworks are completed!")
-                            .font(.system(size: 15, weight: .regular, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
+                        VStack(spacing: 12) {
+                            Image(systemName: filter == .completed ? "paintbrush" : "checkmark.seal")
+                                .font(.system(size: 28, weight: .light))
+                                .foregroundStyle(.white.opacity(0.3))
+                            Text(filter == .completed ? "Nothing finished yet — take your time." : "Every page colored. Well done.")
+                                .font(.system(size: 15, weight: .regular, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.4))
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
                     } else {
                         LazyVStack(spacing: 0) {
                             ForEach(sections) { section in
@@ -203,7 +209,8 @@ struct HomeView: View {
                     }
                     Spacer()
                     if !isCompleted {
-                        Text("Start Coloring")
+                        let hasProgress = !(UserDefaults.standard.array(forKey: "onehue.svg.\(todayArtwork.id)") as? [Int] ?? []).isEmpty
+                        Text(hasProgress ? "Continue" : "Start Coloring")
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(.white.opacity(0.7))
                             .padding(.horizontal, 12)
@@ -250,7 +257,11 @@ struct HomeView: View {
         let diff = utcCal.dateComponents([.hour, .minute], from: now, to: midnight)
         let h = diff.hour ?? 0
         let m = diff.minute ?? 0
-        countdownText = "Next artwork in \(h)h \(m)m"
+        if h > 0 {
+            countdownText = "Next artwork in \(h)h \(m)m"
+        } else {
+            countdownText = "Next artwork in \(m)m"
+        }
     }
 }
 

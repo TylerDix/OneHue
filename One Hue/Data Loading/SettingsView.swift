@@ -136,9 +136,10 @@ struct SettingsView: View {
                                 if let num = Int(jumpText), num >= 1, num <= Artwork.catalog.count {
                                     store.loadArtwork(at: num - 1)
                                     jumpText = ""
+                                    dismiss()
                                 }
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.borderedProminent)
                             .disabled(Int(jumpText).map { $0 >= 1 && $0 <= Artwork.catalog.count } != true)
 
                             Spacer()
@@ -313,7 +314,7 @@ struct AboutView: View {
 
                 VStack(spacing: 16) {
                     aboutParagraph("A new artwork appears each day — the same one for everyone. Pick a color, tap the numbered regions, and watch it come\u{00A0}alive.")
-                    aboutParagraph("No ads. No accounts. No subscriptions. Just color, quiet, and the occasional dry\u{00A0}remark.")
+                    aboutParagraph("No ads. No accounts. No subscriptions. Just color, quiet, and a small thought at the\u{00A0}end.")
                     aboutParagraph("Made by one person who wanted something calm to do with\u{00A0}his\u{00A0}hands.")
                 }
                 .padding(.horizontal, 28)

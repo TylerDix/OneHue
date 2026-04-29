@@ -11,6 +11,7 @@ struct TodayView: View {
     @State private var skipReveal      = false
     @State private var showShareSheet  = false
     @State private var shareImage: PlatformImage? = nil
+    @State private var showRedrawConfirm = false
     @AppStorage("onehue.onboardingShown") private var onboardingShown = false
     @State private var showOnboarding = false
 
@@ -33,6 +34,8 @@ struct TodayView: View {
     #if DEBUG
     // Debug overlay — toggled via long-press on title
     @State private var showDebugOverlay = false
+    @State private var showJumpAlert = false
+    @State private var jumpField: String = ""
     #endif
 
     // TesterPanel removed — debug tools consolidated into Settings (5-tap tagline)
@@ -53,13 +56,24 @@ struct TodayView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay {
                         if store.loadFailed {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 12) {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 28))
                                     .foregroundStyle(.white.opacity(0.5))
                                 Text("Artwork couldn't load")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(.white.opacity(0.5))
+                                Button {
+                                    store.loadArtwork(at: store.currentArtworkIndex)
+                                } label: {
+                                    Text("Try Again")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                        .foregroundStyle(.white.opacity(0.8))
+                                        .padding(.horizontal, 18)
+                                        .padding(.vertical, 8)
+                                        .background(Capsule().fill(.white.opacity(0.12)))
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -72,19 +86,19 @@ struct TodayView: View {
                             } label: {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "scope")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(.white.opacity(exhausted ? 0.3 : 1.0))
-                                        .padding(12)
-                                        .background(Circle().fill(.black.opacity(exhausted ? 0.15 : 0.35)))
-                                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(exhausted ? 0.3 : 0.85))
+                                        .padding(9)
+                                        .background(Circle().fill(.black.opacity(exhausted ? 0.10 : 0.18)))
+                                        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
 
                                     if store.findUsesRemaining > 0, store.findUsesRemaining <= 3 {
                                         Text("\(store.findUsesRemaining)")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .font(.system(size: 10, weight: .bold, design: .rounded))
                                             .foregroundStyle(.white)
-                                            .frame(width: 18, height: 18)
+                                            .frame(width: 16, height: 16)
                                             .background(Circle().fill(.white.opacity(0.25)))
-                                            .offset(x: 4, y: -4)
+                                            .offset(x: 3, y: -3)
                                     }
                                 }
                             }
@@ -101,7 +115,8 @@ struct TodayView: View {
                                         .transition(.opacity.combined(with: .move(edge: .trailing)))
                                 }
                             }
-                            .padding(16)
+                            .padding(.trailing, 12)
+                            .padding(.bottom, 16)
                             .transition(.opacity)
                         }
                     }
@@ -109,6 +124,33 @@ struct TodayView: View {
                         if store.phase == .painting {
                             VStack(alignment: .leading, spacing: 8) {
                                 #if DEBUG
+                                // Quick jump nav (testing only)
+                                HStack(spacing: 4) {
+                                    Button { store.previousArtwork() } label: {
+                                        Image(systemName: "chevron.left")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .frame(width: 24, height: 24)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Button { showJumpAlert = true; jumpField = "" } label: {
+                                        Text("#\(store.currentArtworkIndex + 1)")
+                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                            .padding(.horizontal, 8)
+                                            .frame(height: 24)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Button { store.nextArtwork() } label: {
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .frame(width: 24, height: 24)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .foregroundStyle(.white.opacity(0.8))
+                                .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.55)))
+
                                 // Debug overlay
                                 if showDebugOverlay {
                                     VStack(alignment: .leading, spacing: 4) {
@@ -182,6 +224,7 @@ struct TodayView: View {
                     onNext: { loadNextArtwork() },
                     onGallery: { showCompletion = false; coloringActive = false },
                     onShare: { shareCompletedArtwork() },
+                    onColorAgain: { showRedrawConfirm = true },
                     isTodayArtwork: store.currentArtworkIndex == Artwork.today().index,
                     skipReveal: skipReveal
                 )
@@ -284,7 +327,31 @@ struct TodayView: View {
                 ShareSheet(items: [image, "One Hue — \(store.currentArtwork.displayName)"])
             }
         }
+        .alert("Color Again?", isPresented: $showRedrawConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Start Over", role: .destructive) {
+                showCompletion = false
+                showReveal = false
+                skipReveal = false
+                store.resetProgress()
+            }
+        } message: {
+            Text("This will erase your colors on \"\(store.currentArtwork.displayName)\".")
+        }
         // TesterPanel sheet removed — debug tools now in Settings
+        #if DEBUG
+        .alert("Jump to Artwork", isPresented: $showJumpAlert) {
+            TextField("# 1–\(Artwork.catalog.count)", text: $jumpField)
+                .keyboardType(.numberPad)
+            Button("Go") {
+                if let n = Int(jumpField), n >= 1, n <= Artwork.catalog.count {
+                    store.loadArtwork(at: n - 1)
+                }
+                jumpField = ""
+            }
+            Button("Cancel", role: .cancel) { jumpField = "" }
+        }
+        #endif
     }
 
     // MARK: - Header
@@ -365,6 +432,20 @@ struct TodayView: View {
                 }
                 .frame(width: 32, height: 32)
                 .transition(.opacity)
+            }
+
+            if store.phase == .complete {
+                Button { showRedrawConfirm = true } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(10)
+                        .background(Circle().fill(.black.opacity(0.35)))
+                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Color again")
+                .transition(.opacity.combined(with: .scale))
             }
 
             Button { coloringActive = false } label: {
@@ -821,24 +902,24 @@ private struct FeatureTip: View {
                     // Find button with tip to the left
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "scope")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(12)
-                            .background(Circle().fill(.black.opacity(0.35)))
-                            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .padding(9)
+                            .background(Circle().fill(.black.opacity(0.18)))
+                            .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
 
                         Text("10")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
+                            .frame(width: 16, height: 16)
                             .background(Circle().fill(.red.opacity(0.85)))
-                            .offset(x: 4, y: -4)
+                            .offset(x: 3, y: -3)
                     }
                     .overlay(alignment: .leading) {
                         FeatureTip(text: "Find hidden regions")
                             .offset(x: -160)
                     }
-                    .padding(16)
+                    .padding(12)
                 }
                 .padding(.horizontal, 18)
 
