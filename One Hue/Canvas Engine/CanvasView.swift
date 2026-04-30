@@ -200,6 +200,12 @@ struct CanvasView: View {
                 pulsePhase = 0
             }
         }
+        .onChange(of: currentZoom) { _, newZoom in
+            let zoomed = newZoom > 1.15
+            if zoomed != store.isZoomedIn {
+                withAnimation(.easeOut(duration: 0.2)) { store.isZoomedIn = zoomed }
+            }
+        }
     }
 
     // MARK: - Phase Animation
@@ -287,6 +293,22 @@ struct CanvasView: View {
     }
 
     private func attemptFill(at loc: CGPoint, viewportSize: CGSize, renderSize: CGSize) {
+        // Number label tap in overview mode → auto-select that color and fill
+        if store.selectedGroupIndex == nil {
+            let svgPt = screenToSVGPoint(loc, viewportSize: viewportSize, renderSize: renderSize)
+            if let labelHit = clusterLabelHit(svgPoint: svgPt),
+               !store.filledElements.contains(labelHit.elementIndex) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    store.selectedGroupIndex = labelHit.groupIndex
+                }
+                blobOrigin = svgPt
+                lastTapNormalized = CGPoint(x: loc.x / viewportSize.width,
+                                            y: loc.y / viewportSize.height)
+                store.tryFill(elementIndex: labelHit.elementIndex)
+                return
+            }
+        }
+
         guard let selected = store.selectedGroupIndex else {
             // Nudge user to pick a color first
             if !showColorNudge {
@@ -491,6 +513,56 @@ struct CanvasView: View {
             bestIdx = idx
         }
         return bestIdx
+    }
+
+    /// Checks if a tap hits a visible cluster number label in overview mode (no color selected).
+    /// Matches the renderer's candidate set: top 2 clusters per group by area, area ≥ 1500.
+    private func clusterLabelHit(svgPoint: CGPoint) -> (groupIndex: Int, elementIndex: Int)? {
+        let minArea: CGFloat = 1500
+
+        var groupClusters: [Int: [(cluster: ElementCluster, area: CGFloat)]] = [:]
+        for cluster in store.document.clusters {
+            let hasUnfilled = cluster.elementIndices.contains { !store.filledElements.contains($0) }
+            guard hasUnfilled else { continue }
+            let area = cluster.bounds.width * cluster.bounds.height
+            guard area >= minArea else { continue }
+            groupClusters[cluster.groupIndex, default: []].append((cluster, area))
+        }
+
+        var candidates: [ElementCluster] = []
+        for (_, clusters) in groupClusters {
+            let top = clusters.sorted { $0.area > $1.area }.prefix(2)
+            candidates.append(contentsOf: top.map { $0.cluster })
+        }
+
+        var bestGroupIdx: Int?
+        var bestElementIdx: Int?
+        var bestDist: CGFloat = .greatestFiniteMagnitude
+
+        for cluster in candidates {
+            let dx = svgPoint.x - cluster.labelCenter.x
+            let dy = svgPoint.y - cluster.labelCenter.y
+            let dist = hypot(dx, dy)
+
+            let dim = min(cluster.bounds.width, cluster.bounds.height)
+            let fontSize = max(min(dim * 0.35, 48), 20)
+            let hitRadius = max(fontSize * 1.2, 30)
+
+            guard dist < hitRadius, dist < bestDist else { continue }
+            bestDist = dist
+            bestGroupIdx = cluster.groupIndex
+            bestElementIdx = cluster.elementIndices
+                .filter { !store.filledElements.contains($0) }
+                .min(by: {
+                    let ea = store.document.elements[$0]
+                    let eb = store.document.elements[$1]
+                    return hypot(ea.centroid.x - svgPoint.x, ea.centroid.y - svgPoint.y)
+                         < hypot(eb.centroid.x - svgPoint.x, eb.centroid.y - svgPoint.y)
+                })
+        }
+
+        guard let g = bestGroupIdx, let e = bestElementIdx else { return nil }
+        return (g, e)
     }
 
     // MARK: - Pan / Zoom

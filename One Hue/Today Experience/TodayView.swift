@@ -25,6 +25,7 @@ struct TodayView: View {
 
     // "Stuck" hint — nudges the scope button when few pieces remain and user is idle
     @State private var showStuckHint = false
+    @State private var scopePulseScale: CGFloat = 1.0
     @State private var stuckTimer: Timer?
 
     // Completion reveal
@@ -78,46 +79,67 @@ struct TodayView: View {
                         }
                     }
                     .overlay(alignment: .bottomTrailing) {
-                        if store.phase == .painting && hasUnfilledInSelectedGroup {
-                            let exhausted = store.findUsesRemaining <= 0
-                            Button {
-                                guard !exhausted else { return }
-                                dismissTips(); showStuckHint = false; store.findNextUnfilled()
-                            } label: {
-                                ZStack(alignment: .topTrailing) {
-                                    Image(systemName: "scope")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(.white.opacity(exhausted ? 0.3 : 0.85))
-                                        .padding(9)
-                                        .background(Circle().fill(.black.opacity(exhausted ? 0.10 : 0.18)))
-                                        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
-
-                                    if store.findUsesRemaining > 0, store.findUsesRemaining <= 3 {
-                                        Text("\(store.findUsesRemaining)")
-                                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                                            .foregroundStyle(.white)
-                                            .frame(width: 16, height: 16)
-                                            .background(Circle().fill(.white.opacity(0.25)))
-                                            .offset(x: 3, y: -3)
+                        if store.phase == .painting {
+                            VStack(spacing: 10) {
+                                if store.isZoomedIn {
+                                    Button {
+                                        store.resetZoomTrigger.toggle()
+                                    } label: {
+                                        Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(.white.opacity(0.85))
+                                            .padding(9)
+                                            .background(Circle().fill(.black.opacity(0.18)))
+                                            .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
                                     }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Reset zoom")
+                                    .transition(.opacity.combined(with: .scale))
                                 }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(exhausted ? "Find uses exhausted" : "Find next unfilled region, \(store.findUsesRemaining) uses remaining")
-                            .overlay(alignment: .leading) {
-                                if showStuckHint {
-                                    FeatureTip(text: "Stuck? Tap to find it")
-                                        .offset(x: -170)
-                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                                } else if showFindTip {
-                                    FeatureTip(text: "Find hidden regions")
-                                        .offset(x: -160)
-                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+
+                                if hasUnfilledInSelectedGroup {
+                                    let exhausted = store.findUsesRemaining <= 0
+                                    Button {
+                                        guard !exhausted else { return }
+                                        dismissTips(); showStuckHint = false; store.findNextUnfilled()
+                                    } label: {
+                                        ZStack(alignment: .topTrailing) {
+                                            Image(systemName: "scope")
+                                                .font(.system(size: 15, weight: .semibold))
+                                                .foregroundStyle(.white.opacity(exhausted ? 0.3 : 0.85))
+                                                .padding(9)
+                                                .background(Circle().fill(.black.opacity(exhausted ? 0.10 : 0.18)))
+                                                .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                                                .scaleEffect(scopePulseScale)
+
+                                            if store.findUsesRemaining > 0, store.findUsesRemaining <= 3 {
+                                                Text("\(store.findUsesRemaining)")
+                                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                                    .foregroundStyle(.white)
+                                                    .frame(width: 16, height: 16)
+                                                    .background(Circle().fill(.white.opacity(0.25)))
+                                                    .offset(x: 3, y: -3)
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(exhausted ? "Find uses exhausted" : "Find next unfilled region, \(store.findUsesRemaining) uses remaining")
+                                    .overlay(alignment: .leading) {
+                                        if showStuckHint {
+                                            FeatureTip(text: "Stuck? Tap to find it")
+                                                .offset(x: -170)
+                                                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                        } else if showFindTip {
+                                            FeatureTip(text: "Find hidden regions")
+                                                .offset(x: -160)
+                                                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                        }
+                                    }
+                                    .transition(.opacity)
                                 }
                             }
                             .padding(.trailing, 12)
                             .padding(.bottom, 16)
-                            .transition(.opacity)
                         }
                     }
                     .overlay(alignment: .bottomLeading) {
@@ -314,6 +336,17 @@ struct TodayView: View {
                         withAnimation(.easeOut(duration: 0.3)) { showPaletteTip = false }
                         paletteTipShown = true
                     }
+                }
+            }
+        }
+        .onChange(of: showStuckHint) { _, showing in
+            if showing {
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                    scopePulseScale = 1.3
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    scopePulseScale = 1.0
                 }
             }
         }

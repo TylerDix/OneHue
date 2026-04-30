@@ -19,6 +19,7 @@ final class ColoringStore: ObservableObject {
     @Published var pulseTrigger: UInt = 0
     /// Toggle to trigger a zoom-to-fit reset from outside CanvasView.
     @Published var resetZoomTrigger: Bool = false
+    @Published var isZoomedIn: Bool = false
     static let maxPeeksPerGame = 3
 
     @Published private(set) var filledElements: Set<Int> = [] {
