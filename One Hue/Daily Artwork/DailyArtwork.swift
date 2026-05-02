@@ -160,7 +160,7 @@ extension Artwork {
         Artwork(id: "riceTerraces",       fileName: "riceTerraces",       displayName: "Staircase to the Sky",          completionMessage: "Two thousand years of hands shaped these. Each terrace holds up the one above it.",             month: 5,  day: 2),
         Artwork(id: "cappadociaBalloons", fileName: "cappadociaBalloons", displayName: "Drifting Without Itinerary",    completionMessage: "Cappadocia has more hot air balloons than anywhere on earth. They launch before sunrise, all at once, in silence.",                   month: 5,  day: 3),
         Artwork(id: "winterMarket",      fileName: "winterMarket",       displayName: "Lanterns in the Cold",         completionMessage: "Christmas markets started in the 1300s as a way to stock up before winter sealed the roads. Now we go for the glühwein.",               month: 5,  day: 4),
-        Artwork(id: "swanGliding",        fileName: "swanGliding",        displayName: "The Effort Beneath",           completionMessage: "Swans mate for life and grieve their partners for months. Ducks do not. Different birds, different priorities.",                             month: 5,  day: 5),
+        Artwork(id: "egretMarshDawn",     fileName: "egretMarshDawn",     displayName: "Where the Marsh Wakes",       completionMessage: "An egret can stand motionless for an hour, waiting. Patience built into their bones, one quiet morning at a time.",                          month: 5,  day: 5),
         Artwork(id: "sailboatLake",     fileName: "sailboatLake",     displayName: "Still Water, Tall Sails",        completionMessage: "Sailing predates the wheel by thousands of years. The first boats were just leaves on water.",                      month: 5,  day: 6),
         Artwork(id: "driftwoodPebbles",   fileName: "driftwoodPebbles",   displayName: "What the Tide Left",  completionMessage: "Beach pebbles get rounder over centuries — every wave a tiny edit. Patience, in stone form.",                                    month: 5,  day: 7),
         Artwork(id: "countryBicycles",       fileName: "countryBicycles",       displayName: "Long Shadows, Short Plans",    completionMessage: "Bicycles changed who could go where. Before bikes, most people lived their whole lives within a few miles of where they were born.",    month: 5,  day: 8),
@@ -430,6 +430,10 @@ extension Artwork {
     /// Each artwork anchors to a (month, day) and stays active until the next
     /// artwork's date arrives.
     static func today() -> (artwork: Artwork, index: Int) {
+        #if DEBUG
+        if let testOverride = testModeOverride() { return testOverride }
+        #endif
+
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         let now = Date()
@@ -437,6 +441,41 @@ extension Artwork {
         let day   = cal.component(.day,   from: now)
         return forMonthDay(month: month, day: day)
     }
+
+    #if DEBUG
+    /// Test-mode featured artwork: newest bundle SVG (by mtime) that hasn't been
+    /// completed yet. Lets Tyler ship-test fresh art without waiting for the date
+    /// rollover and without re-coloring already-tested pieces.
+    ///
+    /// Pinning: set UserDefault "onehue.testMode.pinnedID" to a catalog id to
+    /// force that one as featured. Clear the key to resume newest-untested rotation.
+    /// Disable entirely: set UserDefault "onehue.testMode.disabled" = true.
+    static func testModeOverride() -> (artwork: Artwork, index: Int)? {
+        let defaults = UserDefaults.standard
+
+        if defaults.bool(forKey: "onehue.testMode.disabled") { return nil }
+
+        if let pinnedID = defaults.string(forKey: "onehue.testMode.pinnedID"),
+           let idx = catalog.firstIndex(where: { $0.id == pinnedID }) {
+            return (catalog[idx], idx)
+        }
+
+        let fm = FileManager.default
+        var newest: (artwork: Artwork, index: Int, mtime: Date)?
+
+        for (idx, art) in catalog.enumerated() {
+            if defaults.bool(forKey: "onehue.completed.\(art.id)") { continue }
+            guard let url = Bundle.main.url(forResource: art.fileName, withExtension: "svg"),
+                  let attrs = try? fm.attributesOfItem(atPath: url.path),
+                  let mtime = attrs[.modificationDate] as? Date else { continue }
+            if newest == nil || mtime > newest!.mtime {
+                newest = (art, idx, mtime)
+            }
+        }
+
+        return newest.map { ($0.artwork, $0.index) }
+    }
+    #endif
 
     /// Find the active artwork for a given (month, day).
     /// Walks the chronologically-sorted catalog and returns the last entry

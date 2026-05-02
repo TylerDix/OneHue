@@ -169,6 +169,13 @@ struct TodayView: View {
                                             .frame(width: 24, height: 24)
                                     }
                                     .buttonStyle(.plain)
+
+                                    Button { store.debugForceComplete() } label: {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .frame(width: 24, height: 24)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                                 .foregroundStyle(.white.opacity(0.8))
                                 .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.55)))
