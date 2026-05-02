@@ -453,6 +453,30 @@ extension Artwork {
         return (catalog[bestIndex], bestIndex)
     }
 
+    /// Today + previous N days, ordered most-recent-first.
+    /// Uses real calendar arithmetic so non-leap-year handling is automatic
+    /// (Feb 29 simply never appears as "today" in non-leap years).
+    /// Default 7 = today + 6 previous days = the rolling backlog window.
+    static func recentDays(count: Int = 7) -> [(index: Int, artwork: Artwork)] {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        let today = Date()
+        var seenIndices = Set<Int>()
+        var results: [(Int, Artwork)] = []
+        for offset in 0..<count {
+            guard let d = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let m = cal.component(.month, from: d)
+            let day = cal.component(.day, from: d)
+            let entry = forMonthDay(month: m, day: day)
+            // Catalog has gaps where consecutive days share an anchor entry —
+            // dedupe so the strip shows distinct artworks only.
+            if seenIndices.insert(entry.index).inserted {
+                results.append((entry.index, entry.artwork))
+            }
+        }
+        return results
+    }
+
     /// Preserves the Supabase completion tracking flow.
     /// Extracts (month, day) from a "yyyy-MM-dd" string and delegates
     /// to `forMonthDay`.
