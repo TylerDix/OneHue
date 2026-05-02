@@ -9,8 +9,9 @@ struct SettingsView: View {
     @AppStorage("onehue.soundEnabled") private var soundEnabled = true
     @State private var showAbout = false
     #if DEBUG
-    @State private var debugTapCount = 0
-    @State private var showDebug = false
+    // Always-on in DEBUG builds (no longer gated by 5-tap tagline) so testing
+    // tools are one tap away.
+    @State private var showDebug = true
     @State private var jumpText: String = ""
     #endif
 
@@ -82,18 +83,9 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
-                    #if DEBUG
-                    .onTapGesture {
-                        debugTapCount += 1
-                        if debugTapCount >= 5 {
-                            withAnimation { showDebug = true }
-                        }
-                    }
-                    #endif
                 }
 
                 #if DEBUG
-                // Hidden debug (only after 5-tap on tagline)
                 if showDebug {
                     // Navigation
                     Section("Navigation") {
