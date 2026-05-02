@@ -172,9 +172,9 @@ final class ColoringStore: ObservableObject {
         document = doc
         spatialHash = SpatialHash(viewBox: doc.viewBox, elements: doc.elements)
         filledElements = Self.loadProgress(for: doc.id)
-        // Auto-select largest incomplete group — even on fresh artworks so the user
-        // can start tapping immediately without choosing a color first.
-        selectedGroupIndex = Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
+        // Fresh artwork: no color selected so the user sees the whole picture first.
+        // Resume: auto-select the largest incomplete group to pick up where they left off.
+        selectedGroupIndex = filledElements.isEmpty ? nil : Self.largestIncompleteGroup(in: doc.groups, filled: filledElements)
         phase = (filledElements.count >= doc.totalElements && doc.totalElements > 0) ? .complete : .painting
     }
 
