@@ -12,10 +12,15 @@ struct HomeView: View {
     private var todayIndex: Int { Artwork.today().index }
     private var todayArtwork: Artwork { Artwork.today().artwork }
 
-    /// 7-day rolling backlog: today + 6 previous days.
-    /// `recentDays` returns most-recent-first, so index 0 is today.
+    /// Rolling backlog. Release builds: today + 6 previous days.
+    /// DEBUG builds: 10 newest unrated SVGs (testing-focused queue).
+    /// `recentDays` returns most-recent-first, so index 0 is the featured one.
     private var recentDays: [(index: Int, artwork: Artwork)] {
-        Artwork.recentDays(count: 7)
+        #if DEBUG
+        return Artwork.recentDays(count: 10)
+        #else
+        return Artwork.recentDays(count: 7)
+        #endif
     }
 
     private var backlogDays: [(index: Int, artwork: Artwork)] {

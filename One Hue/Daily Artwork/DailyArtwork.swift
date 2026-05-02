@@ -444,11 +444,11 @@ extension Artwork {
 
     #if DEBUG
     /// Test-mode featured artwork: newest bundle SVG (by mtime) that hasn't been
-    /// completed yet. Lets Tyler ship-test fresh art without waiting for the date
-    /// rollover and without re-coloring already-tested pieces.
+    /// rated yet. Lets Tyler ship-test fresh art without waiting for the date
+    /// rollover and without re-touching already-rated pieces.
     ///
     /// Pinning: set UserDefault "onehue.testMode.pinnedID" to a catalog id to
-    /// force that one as featured. Clear the key to resume newest-untested rotation.
+    /// force that one as featured. Clear the key to resume newest-unrated rotation.
     /// Disable entirely: set UserDefault "onehue.testMode.disabled" = true.
     static func testModeOverride() -> (artwork: Artwork, index: Int)? {
         let defaults = UserDefaults.standard
@@ -460,20 +460,33 @@ extension Artwork {
             return (catalog[idx], idx)
         }
 
+        return testModeFeedbackQueue(count: 1).first
+    }
+
+    /// Test-mode backlog: up to `count` newest bundle SVGs (by mtime) that
+    /// haven't been rated yet. Used in place of the calendar 7-day rolling
+    /// window so the home strip is loaded with art that needs feedback —
+    /// max coverage per testing session.
+    static func testModeBacklog(count: Int) -> [(index: Int, artwork: Artwork)]? {
+        if UserDefaults.standard.bool(forKey: "onehue.testMode.disabled") { return nil }
+        return testModeFeedbackQueue(count: count)
+    }
+
+    private static func testModeFeedbackQueue(count: Int) -> [(index: Int, artwork: Artwork)] {
+        let defaults = UserDefaults.standard
         let fm = FileManager.default
-        var newest: (artwork: Artwork, index: Int, mtime: Date)?
+        var entries: [(idx: Int, art: Artwork, mtime: Date)] = []
 
         for (idx, art) in catalog.enumerated() {
-            if defaults.bool(forKey: "onehue.completed.\(art.id)") { continue }
+            if defaults.bool(forKey: "onehue.rated.\(art.id)") { continue }
             guard let url = Bundle.main.url(forResource: art.fileName, withExtension: "svg"),
                   let attrs = try? fm.attributesOfItem(atPath: url.path),
                   let mtime = attrs[.modificationDate] as? Date else { continue }
-            if newest == nil || mtime > newest!.mtime {
-                newest = (art, idx, mtime)
-            }
+            entries.append((idx, art, mtime))
         }
 
-        return newest.map { ($0.artwork, $0.index) }
+        entries.sort { $0.mtime > $1.mtime }
+        return entries.prefix(count).map { ($0.idx, $0.art) }
     }
     #endif
 
@@ -497,6 +510,10 @@ extension Artwork {
     /// (Feb 29 simply never appears as "today" in non-leap years).
     /// Default 7 = today + 6 previous days = the rolling backlog window.
     static func recentDays(count: Int = 7) -> [(index: Int, artwork: Artwork)] {
+        #if DEBUG
+        if let testBacklog = testModeBacklog(count: count) { return testBacklog }
+        #endif
+
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         let today = Date()
