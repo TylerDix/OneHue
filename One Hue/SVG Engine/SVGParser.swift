@@ -278,7 +278,12 @@ final class SVGParser: NSObject, XMLParserDelegate {
     // MARK: - Clustering
 
     /// Merge adjacent same-group elements into clusters using union-find.
-    /// Elements whose bounding boxes are within `margin` SVG units get clustered.
+    /// Tiny+any rule: cluster only when at least one element is small
+    /// (area < tinyArea). Two chunky regions never merge, even when their
+    /// bboxes touch — preserves distinct same-color regions as separately
+    /// tappable. Slivers still absorb into parents for visual cleanliness.
+    /// Tradeoff: visually-continuous big regions split by trace artifacts
+    /// require multiple taps. Validated in Loiter 2026-05-01, ported 2026-05-02.
     private static func buildClusters(
         elements: [SVGElement],
         groups: [SVGColorGroup]
@@ -286,7 +291,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
         var clusters: [ElementCluster] = []
         var elementClusterMap: [Int: Int] = [:]
         var nextId = 0
-        let margin: CGFloat = 12.0
+        let margin: CGFloat = 0.0
+        let tinyArea: CGFloat = 600.0  // ~25x25 SVG units; tune per-catalog
 
         for group in groups {
             let indices = group.elementIndices
@@ -313,11 +319,18 @@ final class SVGParser: NSObject, XMLParserDelegate {
                 if ra != rb { parent[ra] = rb }
             }
 
-            // Connect elements whose expanded bounding boxes intersect
+            // Connect elements whose bounding boxes intersect, but ONLY when
+            // at least one is tiny — preserves big-region distinctness while
+            // still absorbing slivers into their parents.
             for i in 0..<indices.count {
-                let expanded = elements[indices[i]].bounds.insetBy(dx: -margin, dy: -margin)
+                let bi = elements[indices[i]].bounds
+                let ai = bi.width * bi.height
+                let expanded = bi.insetBy(dx: -margin, dy: -margin)
                 for j in (i + 1)..<indices.count {
-                    if expanded.intersects(elements[indices[j]].bounds) {
+                    let bj = elements[indices[j]].bounds
+                    let aj = bj.width * bj.height
+                    let eitherTiny = ai < tinyArea || aj < tinyArea
+                    if eitherTiny && expanded.intersects(bj) {
                         union(indices[i], indices[j])
                     }
                 }
