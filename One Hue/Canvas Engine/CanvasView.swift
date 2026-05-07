@@ -855,6 +855,11 @@ struct CanvasView: View {
         pulseTimer?.invalidate()
         pulsePhase = 0
 
+        // Skip the 30fps pulse timer in low-power mode — it forces 30 Canvas
+        // redraws/sec on top of fill animations, which the clamped CPU can't keep
+        // up with. Stragglers are still selectable; users just don't get the breathe.
+        if ProcessInfo.processInfo.isLowPowerModeEnabled { return }
+
         // Check if the selected group is nearly done — if so, pulse indefinitely
         let nearlyDone: Bool = {
             guard let selIdx = store.selectedGroupIndex, selIdx < store.document.groups.count else { return false }
@@ -938,7 +943,11 @@ struct SVGCanvasRenderer: View {
     let pulsePhase: Double  // 0 = no pulse, >0 = seconds into breathing animation
     let strokeDissolve: CGFloat  // 1.0 = visible boundary lines, 0.0 = dissolved (seamless art)
 
-    private static let blobDuration: TimeInterval = 0.6
+    /// Adaptive blob reveal duration: shorter in low-power mode so the per-frame
+    /// O(N) Canvas pass doesn't spread across as many frames when the CPU is clamped.
+    private static var blobDuration: TimeInterval {
+        ProcessInfo.processInfo.isLowPowerModeEnabled ? 0.25 : 0.6
+    }
 
     // MARK: - Checkerboard Tiles
 
