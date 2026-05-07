@@ -159,7 +159,6 @@ final class ColoringStore: ObservableObject {
         findUsesRemaining = Self.maxFindsPerGame
         peekUsesRemaining = Self.maxPeeksPerGame
         tapCount = 0
-        autoGrabbedCount = 0
         isPeeking = false
         let catalog = Artwork.catalog
         guard index >= 0, index < catalog.count else { return }
@@ -222,14 +221,6 @@ final class ColoringStore: ObservableObject {
             toFill.formUnion(document.clusters[clusterIdx].elementIndices)
         }
 
-        let clusterCount = toFill.count
-
-        // Tiny-grab disabled — user prefers manual control
-        // if !debugDisableTinyGrab {
-        //     collectTinyNeighbors(from: toFill, groupIndex: groupIdx, into: &toFill)
-        // }
-
-        autoGrabbedCount += toFill.count - clusterCount
         tapCount += 1
 
         // Sound fires BEFORE fill mutation for snappier feedback
@@ -399,57 +390,12 @@ final class ColoringStore: ObservableObject {
         filledElements.insert(idx)
     }
 
-    // MARK: - Auto-Fill Tiny Neighbors
+    // MARK: - Tap-Target Tuning
 
     /// SVG-unit threshold: elements with min(width, height) below this are "tiny".
-    /// Only truly invisible slivers should be auto-filled — anything the user can
-    /// see and tap should remain for them. Tightened from previous values (max 50)
-    /// because auto-fill was grabbing visible pieces and making the game too easy.
+    /// Used by CanvasView's fuzzy tap matching to prefer larger elements when
+    /// both a sliver and a chunky region are nearby — avoids frustrating speck taps.
     static let tinyThresholdMax: CGFloat = 20
-    private static let isIPadDevice = isIPad
-    private var tinyThreshold: CGFloat {
-        let total = document.totalElements
-        let base: CGFloat
-        if total <= 50  { base = 5 }
-        else if total <= 100 { base = 10 }
-        else if total <= 200 { base = 15 }
-        else { base = Self.tinyThresholdMax }
-        return Self.isIPadDevice ? base * 0.5 : base
-    }
-    /// How far (SVG units) to look for adjacent tiny elements
-    private var neighborMargin: CGFloat {
-        let total = document.totalElements
-        let base: CGFloat
-        if total <= 50  { base = 5 }
-        else if total <= 100 { base = 10 }
-        else if total <= 200 { base = 15 }
-        else { base = 20 }
-        return Self.isIPadDevice ? base * 0.5 : base
-    }
-
-    /// BFS cascade: starting from all seed elements, find touching tiny same-group
-    /// elements and add them to `toFill`. Uses spatial hash for O(nearby) lookup
-    /// instead of scanning all group elements per queue item.
-    private func collectTinyNeighbors(from seeds: Set<Int>, groupIndex: Int, into toFill: inout Set<Int>) {
-        guard groupIndex < document.groups.count else { return }
-        let groupElements = Set(document.groups[groupIndex].elementIndices)
-        var queue = Array(seeds)
-
-        while !queue.isEmpty {
-            let current = queue.removeFirst()
-            let zone = document.elements[current].bounds.insetBy(dx: -neighborMargin, dy: -neighborMargin)
-
-            for idx in spatialHash.candidates(in: zone) {
-                guard groupElements.contains(idx) else { continue }
-                guard !filledElements.contains(idx), !toFill.contains(idx) else { continue }
-                let el = document.elements[idx]
-                guard min(el.bounds.width, el.bounds.height) < tinyThreshold else { continue }
-                guard zone.intersects(el.bounds) else { continue }
-                toFill.insert(idx)
-                queue.append(idx)
-            }
-        }
-    }
 
     // MARK: - Peek
 
@@ -503,15 +449,6 @@ final class ColoringStore: ObservableObject {
 
     /// Running count of user taps (tryFill calls that result in .filled).
     @Published private(set) var tapCount: Int = 0
-    /// Total elements filled by tiny-neighbor auto-grab (not direct taps).
-    @Published private(set) var autoGrabbedCount: Int = 0
-
-    /// When true, skips the tiny-neighbor BFS so each tap only fills its cluster.
-    /// Toggle via debug triple-tap on the tap counter overlay.
-    var debugDisableTinyGrab: Bool {
-        get { UserDefaults.standard.bool(forKey: "onehue.debug.disableTinyGrab") }
-        set { UserDefaults.standard.set(newValue, forKey: "onehue.debug.disableTinyGrab"); objectWillChange.send() }
-    }
 
     #if DEBUG
     /// Live canvas metrics published by CanvasView for the tester panel.

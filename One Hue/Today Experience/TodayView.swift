@@ -184,18 +184,12 @@ struct TodayView: View {
                                 if showDebugOverlay {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Taps: \(store.tapCount)")
-                                        Text("Grabbed: \(store.autoGrabbedCount)")
                                         Text("Elements: \(store.document.totalElements)")
-                                        Text("Grab: \(store.debugDisableTinyGrab ? "OFF" : "ON")")
-                                            .foregroundStyle(store.debugDisableTinyGrab ? .red : .green)
                                     }
                                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                                     .foregroundStyle(.white.opacity(0.8))
                                     .padding(8)
                                     .background(RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.6)))
-                                    .onTapGesture {
-                                        store.debugDisableTinyGrab.toggle()
-                                    }
                                     .transition(.opacity)
                                 }
                                 #endif

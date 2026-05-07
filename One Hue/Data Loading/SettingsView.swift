@@ -229,11 +229,6 @@ struct SettingsView: View {
                         } label: {
                             Text("Reset Progress")
                         }
-
-                        Toggle("Tiny Grab", isOn: Binding(
-                            get: { !store.debugDisableTinyGrab },
-                            set: { store.debugDisableTinyGrab = !$0 }
-                        ))
                     }
                     .transition(.opacity)
                 }

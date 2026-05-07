@@ -278,18 +278,12 @@ final class SVGParser: NSObject, XMLParserDelegate {
     // MARK: - Clustering
 
     /// Merge adjacent same-group elements into clusters using union-find.
-    /// Two-tier rule (revised 2026-05-02 after One Hue device test):
-    ///
-    ///   - **Tiny+any**: if at least one element is small (area < tinyArea),
-    ///     cluster when bboxes are within `margin` units. Slivers absorb.
-    ///   - **Big+big**: cluster only when bboxes have true positive-area
-    ///     overlap. This catches same-color regions split by trace artifacts
-    ///     (e.g. an animal body fragmented into pieces) without merging two
-    ///     genuinely distinct shapes that just sit near each other.
-    ///
-    /// Loiter's strict tiny-only rule was too granular for One Hue's catalog —
-    /// nature/animal scenes have lots of medium-sized pieces from trace splits
-    /// that should read as one region.
+    /// Tiny+any rule: cluster only when at least one element is small
+    /// (area < tinyArea). Two chunky regions never merge, even when their
+    /// bboxes touch — preserves distinct same-color regions as separately
+    /// tappable. Slivers still absorb into parents for visual cleanliness.
+    /// Tradeoff: visually-continuous big regions split by trace artifacts
+    /// require multiple taps. Validated in Loiter 2026-05-01, ported 2026-05-02.
     private static func buildClusters(
         elements: [SVGElement],
         groups: [SVGColorGroup]
@@ -297,8 +291,8 @@ final class SVGParser: NSObject, XMLParserDelegate {
         var clusters: [ElementCluster] = []
         var elementClusterMap: [Int: Int] = [:]
         var nextId = 0
-        let margin: CGFloat = 4.0
-        let tinyArea: CGFloat = 600.0  // ~25x25 SVG units
+        let margin: CGFloat = 0.0
+        let tinyArea: CGFloat = 600.0  // ~25x25 SVG units; tune per-catalog
 
         for group in groups {
             let indices = group.elementIndices
@@ -325,6 +319,9 @@ final class SVGParser: NSObject, XMLParserDelegate {
                 if ra != rb { parent[ra] = rb }
             }
 
+            // Connect elements whose bounding boxes intersect, but ONLY when
+            // at least one is tiny — preserves big-region distinctness while
+            // still absorbing slivers into their parents.
             for i in 0..<indices.count {
                 let bi = elements[indices[i]].bounds
                 let ai = bi.width * bi.height
@@ -333,15 +330,7 @@ final class SVGParser: NSObject, XMLParserDelegate {
                     let bj = elements[indices[j]].bounds
                     let aj = bj.width * bj.height
                     let eitherTiny = ai < tinyArea || aj < tinyArea
-
-                    // Tiny: bridge small gaps to absorb into parent.
-                    // Big-big: require true positive-area overlap (CGRect.intersects
-                    // returns false for edge-touching, only true for real overlap).
-                    let shouldMerge = eitherTiny
-                        ? expanded.intersects(bj)
-                        : bi.intersects(bj)
-
-                    if shouldMerge {
+                    if eitherTiny && expanded.intersects(bj) {
                         union(indices[i], indices[j])
                     }
                 }
