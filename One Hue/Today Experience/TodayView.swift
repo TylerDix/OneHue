@@ -6,7 +6,6 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
 
-    @State private var showSettings    = false
     @State private var showCompletion  = false
     @State private var skipReveal      = false
     @State private var showShareSheet  = false
@@ -16,10 +15,8 @@ struct TodayView: View {
     @State private var showOnboarding = false
 
     // Feature tooltips — shown once ever if the user hasn't discovered the feature
-    @AppStorage("onehue.tip.peek") private var peekTipShown = false
     @AppStorage("onehue.tip.find") private var findTipShown = false
     @AppStorage("onehue.tip.palette") private var paletteTipShown = false
-    @State private var showPeekTip = false
     @State private var showFindTip = false
     @State private var showPaletteTip = false
 
@@ -235,7 +232,7 @@ struct TodayView: View {
             VStack(spacing: 0) {
                 header
                     .padding(.top, 4)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 12)
                     .background(Color.appBackground)
 
                 // (tester panel is a sheet — no inline bar needed)
@@ -279,18 +276,8 @@ struct TodayView: View {
             }
         }
         .onChange(of: store.filledElements.count) { _, count in
-            // Peek tip: after 20 fills, if peek was never used
-            if !peekTipShown && count == 20
-                && store.peekUsesRemaining == ColoringStore.maxPeeksPerGame {
-                dismissAllHints()
-                withAnimation(.easeOut(duration: 0.4)) { showPeekTip = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                    withAnimation(.easeOut(duration: 0.3)) { showPeekTip = false }
-                    peekTipShown = true
-                }
-            }
-            // Find tip: after 40 fills, if find was never used
-            else if !findTipShown && count == 40
+            // Find tip: after 30 fills, if find was never used
+            if !findTipShown && count == 30
                 && store.findUsesRemaining == ColoringStore.maxFindsPerGame {
                 dismissAllHints()
                 withAnimation(.easeOut(duration: 0.4)) { showFindTip = true }
@@ -317,11 +304,7 @@ struct TodayView: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView(store: store)
-                .presentationDetents([.large])
-        }
-        // Gallery is now the home screen — no sheet needed
+        // Settings now lives only on Home — canvas stays focused
         .sheet(isPresented: $showShareSheet) {
             if let image = shareImage {
                 ShareSheet(items: [image, "One Hue — \(store.currentArtwork.displayName)"])
@@ -458,17 +441,6 @@ struct TodayView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Back to Gallery")
-
-            Button { showSettings = true } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(10)
-                    .background(Circle().fill(.black.opacity(0.35)))
-                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Settings")
         }
         .padding(.horizontal, 18)
     }
@@ -478,11 +450,9 @@ struct TodayView: View {
     /// Dismiss all tips permanently (user interacted, so they don't need them)
     private func dismissTips() {
         withAnimation(.easeOut(duration: 0.2)) {
-            showPeekTip = false
             showFindTip = false
             showPaletteTip = false
         }
-        peekTipShown = true
         findTipShown = true
         paletteTipShown = true
     }
@@ -491,7 +461,6 @@ struct TodayView: View {
     /// Used before showing a new tip so only one is visible at a time.
     private func dismissAllHints() {
         withAnimation(.easeOut(duration: 0.2)) {
-            showPeekTip = false
             showFindTip = false
             showPaletteTip = false
             showStuckHint = false
@@ -530,7 +499,7 @@ struct TodayView: View {
             Task { @MainActor in
                 guard store.phase == .painting, store.globalRemaining > 0 else { return }
                 // Don't show stuck hint if another tip is visible
-                guard !showPeekTip, !showFindTip, !showPaletteTip else { return }
+                guard !showFindTip, !showPaletteTip else { return }
                 withAnimation(.easeOut(duration: 0.4)) { showStuckHint = true }
                 // Auto-dismiss after 6s if not acted on
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6) {

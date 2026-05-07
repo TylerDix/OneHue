@@ -8,11 +8,22 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var countdownText = ""
     @State private var timerCancellable: (any Cancellable)?
+    @State private var heroDocument: SVGDocument?
     private let timer = Timer.publish(every: 60, on: .main, in: .common)
 
     private let columns = [
         GridItem(.adaptive(minimum: 160), spacing: 14)
     ]
+
+    init(store: ColoringStore) {
+        self.store = store
+        // Synchronously parse today's SVG so the hero card is never blank on cold launch.
+        // One-time cost at app startup; subsequent navigations reuse the cached doc.
+        let today = Artwork.today().artwork
+        let doc = SVGDocumentCache.shared.peekDocument(for: today)
+            ?? SVGDocumentCache.shared.document(for: today)
+        self._heroDocument = State(initialValue: doc)
+    }
 
     private var todayIndex: Int { Artwork.today().index }
     private var todayArtwork: Artwork { Artwork.today().artwork }
@@ -32,12 +43,28 @@ struct HomeView: View {
                         .padding(.bottom, 8)
 
                     // MARK: - Filter
-                    Picker("Filter", selection: $filter) {
+                    HStack(spacing: 8) {
                         ForEach(GalleryFilter.allCases, id: \.self) { f in
-                            Text(f.rawValue).tag(f)
+                            let isSelected = filter == f
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    filter = f
+                                }
+                            } label: {
+                                Text(f.rawValue)
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.55))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .background(
+                                        Capsule()
+                                            .fill(.white.opacity(isSelected ? 0.12 : 0))
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
+                        Spacer(minLength: 0)
                     }
-                    .pickerStyle(.segmented)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
 
@@ -96,9 +123,8 @@ struct HomeView: View {
                 }
             }
             .background(Color.appBackground)
-            .navigationTitle("One Hue")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -139,8 +165,6 @@ struct HomeView: View {
     }
 
     // MARK: - Hero Card
-
-    @State private var heroDocument: SVGDocument?
 
     private var heroCard: some View {
         let isCompleted = ColoringStore.isArtworkCompleted(todayArtwork.id)
@@ -210,12 +234,13 @@ struct HomeView: View {
                     Spacer()
                     if !isCompleted {
                         let hasProgress = !(UserDefaults.standard.array(forKey: "onehue.svg.\(todayArtwork.id)") as? [Int] ?? []).isEmpty
-                        Text(hasProgress ? "Continue" : "Start Coloring")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(.white.opacity(0.12)))
+                        HStack(spacing: 4) {
+                            Text(hasProgress ? "Continue" : "Start")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(.white.opacity(0.55))
                     }
                 }
                 .padding(.horizontal, 4)
@@ -224,13 +249,6 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Today's artwork: \(todayArtwork.displayName)\(isCompleted ? ", completed" : "")")
-        .task {
-            if heroDocument == nil {
-                heroDocument = await Task.detached(priority: .userInitiated) {
-                    SVGDocumentCache.shared.document(for: todayArtwork)
-                }.value
-            }
-        }
     }
 
     // MARK: - Helpers
